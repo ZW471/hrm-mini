@@ -1,0 +1,41 @@
+[project]
+name = "hrm-mini"
+version = "0.1.0"
+description = "Minimalistic implementation of Hierarchical Recurrent Model (HRM)"
+requires-python = ">=3.13,<3.14"
+dependencies = [
+    "torch==2.14.0",
+    "einops",
+    "tqdm",
+    "coolname",
+    "pydantic",
+    "argdantic",
+    "wandb",
+    "omegaconf",
+    "hydra-core",
+    "huggingface-hub",
+    "numpy",
+    "matplotlib",
+    "datasets",
+    "pyyaml",
+]
+
+# Needed only for visualizations.ipynb (dynamics analysis).
+# Install with: uv sync --group notebook
+[dependency-groups]
+notebook = [
+    "jupyter",
+    "ipykernel",
+]
+
+# The host driver is 535.129.03 (CUDA 12.2), so CUDA 13 wheels (cu130) are
+# unusable -- they require driver >= 580. CUDA 12.x wheels run on this driver
+# via minor-version compatibility, and torch 2.14.0 still ships a cu126 build,
+# so this is the newest torch available to us.
+[[tool.uv.index]]
+name = "pytorch-cu126"
+url = "https://download.pytorch.org/whl/cu126"
+explicit = true
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu126" }
