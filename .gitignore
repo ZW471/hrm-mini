@@ -45,6 +45,7 @@ ipython_config.py
 
 # Experiment data and artifacts
 /data
+/downloaded-datasets
 checkpoints/
 outputs/
 wandb/
@@ -75,3 +76,5 @@ logs/
 ._*
 Thumbs.db
 desktop.ini
+
+
