@@ -51,6 +51,9 @@ class TrainConfig(pydantic.BaseModel):
 
     log_interval: int = 5
 
+# Eval split that "best.pt" is selected on (must be one of the eval_loaders splits)
+BEST_METRIC_SPLIT = "test_hard"
+
 # [Utils]
 def load_module(identifier: str):
     module_path, class_name = identifier.split('@')
@@ -151,6 +154,7 @@ def train_single_seed(config: TrainConfig, seed: int, group_name: str, WORLD_SIZ
             wandb.run.log_code()
 
     step = 0
+    best_metric = -1.0
     for epoch in range(config.epochs):
         model.train()
         for x, y in train_loader:
@@ -176,12 +180,7 @@ def train_single_seed(config: TrainConfig, seed: int, group_name: str, WORLD_SIZ
         model.eval()
         optim.swap_ema()
 
-        # Save model
-        # Clean '_orig_mod.' prefix added by torch.compile for easier downstream loading
-        if RANK == 0:
-            torch.save({k.replace("_orig_mod.", ""): v for k, v in model.module.state_dict().items()},
-                       os.path.join(checkpoint_dir, f"epoch_{epoch}.pt"))
-
+        eval_metrics = {}
         for eval_name, eval_loader in eval_loaders.items():
             num_total_correct = torch.zeros(2, dtype=torch.long, device="cuda")
             for x, y in eval_loader:
@@ -200,7 +199,24 @@ def train_single_seed(config: TrainConfig, seed: int, group_name: str, WORLD_SIZ
             dist.reduce(num_total_correct, dst=0)
             num_total_correct = num_total_correct.cpu().tolist()
             if RANK == 0:
-                wandb.log({f"eval/{eval_name}_exact_match": num_total_correct[0] / num_total_correct[1]}, step=step)
+                exact_match = num_total_correct[0] / num_total_correct[1]
+                eval_metrics[eval_name] = exact_match
+                wandb.log({f"eval/{eval_name}_exact_match": exact_match}, step=step)
+
+        # Save model (rank 0 only, all ranks hold identical weights).
+        # Only 'last' and 'best' are kept; both are saved with EMA weights swapped in,
+        # i.e. exactly the weights that produced the eval numbers above.
+        # Clean '_orig_mod.' prefix added by torch.compile for easier downstream loading
+        if RANK == 0:
+            state_dict = {k.replace("_orig_mod.", ""): v for k, v in model.module.state_dict().items()}
+            torch.save(state_dict, os.path.join(checkpoint_dir, "last.pt"))
+
+            score = eval_metrics.get(BEST_METRIC_SPLIT)
+            if score is not None and score > best_metric:
+                best_metric = score
+                torch.save(state_dict, os.path.join(checkpoint_dir, "best.pt"))
+
+            del state_dict
 
         optim.swap_ema()  # Swap EMA back
 
