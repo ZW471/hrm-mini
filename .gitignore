@@ -46,6 +46,7 @@ ipython_config.py
 # Experiment data and artifacts
 /data
 /downloaded-datasets
+/assets
 checkpoints/
 outputs/
 wandb/
