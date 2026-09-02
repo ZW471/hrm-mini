@@ -33,6 +33,9 @@ class TrainConfig(pydantic.BaseModel):
     arch: ArchConfig
     data: DataConfig
 
+    # Name used for the wandb group / checkpoint dir (defaults to the hydra config name)
+    run_name: Optional[str] = None
+
     seeds: list[int] = [42]
 
     cycles_per_data: int
@@ -62,8 +65,12 @@ def load_module(identifier: str):
     return getattr(module, class_name)
 
 # [Training and Inference Step]
-def train_step(model: nn.Module, carry: Carry, opt: torch.optim.Optimizer, x: Tensor, y: Tensor):
-    carry, y_hat = model(carry, x)
+def model_input(x: Tensor, y: Tensor, is_autoregressive: bool) -> Tensor:
+    """Decoder-only models are teacher-forced on `[question ++ answer]`; encoders only see the question."""
+    return torch.cat([x, y], dim=-1) if is_autoregressive else x
+
+def train_step(model: nn.Module, carry: Carry, opt: torch.optim.Optimizer, x: Tensor, y: Tensor, is_autoregressive: bool = False):
+    carry, y_hat = model(carry, model_input(x, y, is_autoregressive))
     # loss (f32 for CrossEntropy)
     loss = F.cross_entropy(y_hat.view(-1, y_hat.shape[-1]).to(torch.float32), y.view(-1).long(), reduction="mean")
     loss.backward()
@@ -85,6 +92,21 @@ def train_step(model: nn.Module, carry: Carry, opt: torch.optim.Optimizer, x: Te
 def run_inference(model: nn.Module, carry: Carry, x: Tensor):
     carry, y_hat = model(carry, x)
     return carry, torch.argmax(y_hat, dim=-1)
+
+@torch.inference_mode()
+def generate(model: nn.Module, x: Tensor) -> Tensor:
+    """Greedy decoding of the answer block for autoregressive models, one token at a time.
+
+    The answer slots start as the BOS token (id 0) and are overwritten left to right; causal masking
+    keeps the not-yet-decoded slots from leaking into earlier positions. Shapes stay static so the
+    compiled graph is reused across all decoding steps.
+    """
+    block_len = x.shape[-1]
+    seq = torch.cat([x, torch.zeros_like(x)], dim=-1)
+    for pos in range(1, block_len):
+        _carry, y_hat = model({}, seq)
+        seq[:, block_len + pos] = torch.argmax(y_hat[:, pos], dim=-1)
+    return seq[:, block_len:]
 
 def update_lr(config: TrainConfig, optim: torch.optim.Optimizer, step: int, total_steps: int) -> float:
     # Linear warmup cosine schedule
@@ -116,6 +138,7 @@ def train_single_seed(config: TrainConfig, seed: int, group_name: str, WORLD_SIZ
 
     # Initialize Model and Optimizer
     model_cls = load_module(f"arch.{config.arch.name}")
+    is_autoregressive: bool = getattr(model_cls, "is_autoregressive", False)
     with torch.device("cuda"):
         model: nn.Module = model_cls(config.arch.__pydantic_extra__ | train_metadata)
         model = torch.compile(model, dynamic=False, fullgraph=True)  # pyright: ignore[reportAssignmentType]
@@ -168,7 +191,7 @@ def train_single_seed(config: TrainConfig, seed: int, group_name: str, WORLD_SIZ
                 step += 1
                 lr = update_lr(config, optim, step, total_steps)
 
-                carry, metrics = train_step(model, carry, optim, x, y)
+                carry, metrics = train_step(model, carry, optim, x, y, is_autoregressive)
 
             if RANK == 0 and progress_bar is not None and step - progress_bar.n >= config.log_interval:
                 progress_bar.update(step - progress_bar.n)
@@ -184,16 +207,20 @@ def train_single_seed(config: TrainConfig, seed: int, group_name: str, WORLD_SIZ
         for eval_name, eval_loader in eval_loaders.items():
             num_total_correct = torch.zeros(2, dtype=torch.long, device="cuda")
             for x, y in eval_loader:
-                # Run inference
-                carry: Carry = model.module.initial_carry
-                y_hat = None
-                for _ in range(config.cycles_per_data):
-                    carry, y_hat = run_inference(model, carry, x.cuda())
+                # Run inference. Autoregressive models must decode the answer instead of reading it.
+                if is_autoregressive:
+                    y_hat = generate(model, x.cuda())
+                else:
+                    carry: Carry = model.module.initial_carry
+                    y_hat = None
+                    for _ in range(config.cycles_per_data):
+                        carry, y_hat = run_inference(model, carry, x.cuda())
+                    del carry
 
                 num_total_correct[0] += torch.all(y_hat == y.cuda(), dim=-1).sum()
                 num_total_correct[1] += y.shape[0]
 
-                del carry, y_hat
+                del y_hat
 
             # Reduce and log
             dist.reduce(num_total_correct, dst=0)
@@ -249,7 +276,7 @@ def train(config_dict: dict[str, Any]):
     config = TrainConfig(**config_dict)
 
     # Generate a shared group name for all seeds in this run
-    group_name = os.environ.get("MLP_TASK_NAME", f"{HydraConfig.get().job.config_name} {coolname.generate_slug(2)}")
+    group_name = os.environ.get("MLP_TASK_NAME", f"{config.run_name or HydraConfig.get().job.config_name} {coolname.generate_slug(2)}")
 
     for seed in config.seeds:
         train_single_seed(config, seed, group_name, WORLD_SIZE, RANK)

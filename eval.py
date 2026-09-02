@@ -8,7 +8,7 @@ import tqdm
 import numpy as np
 
 from arch.layers import Carry
-from train import TrainConfig, load_module, run_inference
+from train import TrainConfig, load_module, run_inference, generate
 
 # --- Main Eval Logic ---
 def evaluate():
@@ -32,6 +32,7 @@ def evaluate():
 
     # Initialize Model
     model_cls = load_module(f"arch.{config.arch.name}")
+    is_autoregressive: bool = getattr(model_cls, "is_autoregressive", False)
     with torch.device("cuda"):
         model = model_cls(config.arch.__pydantic_extra__ | metadata)
         # Load Checkpoint
@@ -53,12 +54,15 @@ def evaluate():
         samples.append(x.numpy())
 
         x, y = x.cuda(), y.cuda()
-        carry: Carry = model.initial_carry  # pyright: ignore[reportAssignmentType]
-        y_hat = None
-        
-        for _ in range(config.cycles_per_data):
-            carry, y_hat = run_inference(model, carry, x)
-        
+        if is_autoregressive:
+            y_hat = generate(model, x)
+        else:
+            carry: Carry = model.initial_carry  # pyright: ignore[reportAssignmentType]
+            y_hat = None
+
+            for _ in range(config.cycles_per_data):
+                carry, y_hat = run_inference(model, carry, x)
+
         # Unpack
         correctness.append(torch.all(y_hat == y, dim=-1).cpu().numpy())
         total_correct += torch.all(y_hat == y, dim=-1).sum().item()

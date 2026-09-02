@@ -1,0 +1,43 @@
+# Decoder-only autoregressive transformer, FLOP-matched to tuned_hrm: 44.05M params (3.50x), 14.83 GFLOP/fwd (1.00x).
+defaults:
+  - data: sudoku
+  - _self_
+
+run_name: ar_flops_matched
+
+arch:
+  name: ar_transformer@AutoregressiveTransformer
+
+  # Transformer
+  num_layers: 14  # = 28 HRM block-forwards halved: causal blocks run on 2x seq_len (question ++ answer)
+
+  hidden_size: 512
+  intermediate_size: 2048
+  head_dim: 64
+
+  norm_eps: 1e-6
+  rope_theta: 10000.0
+
+  forward_dtype: bfloat16
+
+# HRM takes `cycles_per_data` (16) gradient steps per batch via deep supervision. These models are
+# feed-forward, so they take one step per batch and instead see each sample 16x more often
+# (repeat 200 -> 3200). Optimizer steps, samples seen and eval frequency all match tuned_hrm.
+data:
+  repeat: 3200
+
+seeds: [1, 2, 3]
+
+cycles_per_data: 1
+epochs: 20
+
+local_batch_size: 96
+
+lr: 1e-4
+lr_warmup_steps: 2000
+lr_min_ratio: 1.0
+
+beta1: 0.9
+beta2: 0.95
+weight_decay: 1.0
+ema: 0.999
