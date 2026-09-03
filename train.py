@@ -155,8 +155,7 @@ def train_single_seed(config: TrainConfig, seed: int, group_name: str, WORLD_SIZ
     )
 
     # Initialize checkpointing (rank 0 only, all ranks hold identical weights)
-    run_name = f"{group_name}/seed_{seed}"
-    checkpoint_dir = os.path.join("checkpoints", run_name)
+    checkpoint_dir = os.path.join("checkpoints", group_name, f"seed_{seed}")
     if RANK == 0:
         os.makedirs(checkpoint_dir, exist_ok=True)
 
@@ -168,8 +167,9 @@ def train_single_seed(config: TrainConfig, seed: int, group_name: str, WORLD_SIZ
     if RANK == 0:
         progress_bar = tqdm.tqdm(total=total_steps, desc=f"seed={seed}")
 
+        # Same wandb run name across seeds so runs can be grouped by name
         wandb.init(project=config.data.name,
-                   name=run_name,
+                   name=group_name,
                    group=group_name,
                    config=config.model_dump() | {"seed": seed},
                    settings=wandb.Settings(x_disable_stats=True))
