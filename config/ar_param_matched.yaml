@@ -20,15 +20,17 @@ arch:
 
   forward_dtype: bfloat16
 
-# HRM takes `cycles_per_data` (16) gradient steps per batch via deep supervision. These models are
-# feed-forward, so they take one step per batch and instead see each sample 16x more often
-# (repeat 200 -> 3200). Optimizer steps, samples seen and eval frequency all match tuned_hrm.
-data:
-  repeat: 3200
+# Data pipeline is left exactly as tuned_hrm's: `repeat: 200` from config/data/sudoku.yaml, and
+# `cycles_per_data: 16` gradient steps per batch. Sudoku augmentation is sampled on the fly per
+# batch, so `repeat` sets how many distinct augmentations of each puzzle the model ever sees;
+# raising it to trade deep-supervision steps for fresh data would give the baseline 16x HRM's
+# augmented training set and make the comparison a data-scale one. The carry is empty for these
+# feed-forward models, so the 16 cycles are simply 16 optimizer steps on the same augmented batch.
+# Optimizer steps, augmentations seen and eval frequency all match tuned_hrm.
 
 seeds: [1, 2, 3]
 
-cycles_per_data: 1
+cycles_per_data: 16
 epochs: 20
 
 local_batch_size: 96
