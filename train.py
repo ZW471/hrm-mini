@@ -53,9 +53,19 @@ class TrainConfig(pydantic.BaseModel):
     ema: Optional[float] = None
 
     log_interval: int = 5
+    # Evaluate every N optimizer steps instead of once per epoch. Needed when total steps are
+    # matched across datasets of very different sizes: on full Sudoku-Extreme one pass over the
+    # data is already the whole step budget, so per-epoch eval would yield a single point.
+    eval_interval: Optional[int] = None
 
-# Eval split that "best.pt" is selected on (must be one of the eval_loaders splits)
-BEST_METRIC_SPLIT = "test_hard"
+    # Eval splits, and optionally a different dataset to take them from. Full Sudoku-Extreme names
+    # its splits train/test and has no `test_hard`, so the full-data runs point these at the 1k
+    # repo to evaluate on exactly the same 20k test_hard puzzles as the 1k runs. Verified disjoint
+    # from the full train split (0/20,000 overlap), so this leaks nothing.
+    eval_splits: list[str] = ["test_hard"]
+    eval_dataset_name: Optional[str] = None
+    # Eval split that "best.pt" is selected on (must be one of `eval_splits`)
+    best_metric_split: str = "test_hard"
 
 # [Utils]
 def load_module(identifier: str):
@@ -132,7 +142,9 @@ def train_single_seed(config: TrainConfig, seed: int, group_name: str, WORLD_SIZ
     # Initialize Dataloader
     create_dataloader = load_module(f"dataset.{config.data.name}@create_dataloader")
     train_loader, train_metadata = create_dataloader("train", config.local_batch_size, rank=RANK, world_size=WORLD_SIZE, seed=seed, **config.data.__pydantic_extra__)  # pyright: ignore[reportCallIssue]
-    eval_loaders = {split_name: create_dataloader(split_name, config.local_batch_size, rank=RANK, world_size=WORLD_SIZE, seed=seed, **config.data.__pydantic_extra__)[0] for split_name in ["test_hard"]}  # pyright: ignore[reportCallIssue]
+    eval_data_kwargs = dict(config.data.__pydantic_extra__ or {}) | (
+        {"dataset_name": config.eval_dataset_name} if config.eval_dataset_name else {})
+    eval_loaders = {split_name: create_dataloader(split_name, config.local_batch_size, rank=RANK, world_size=WORLD_SIZE, seed=seed, **eval_data_kwargs)[0] for split_name in config.eval_splits}  # pyright: ignore[reportCallIssue]
 
     total_steps = int(config.cycles_per_data * len(train_loader) * config.epochs)
 
@@ -178,28 +190,11 @@ def train_single_seed(config: TrainConfig, seed: int, group_name: str, WORLD_SIZ
 
     step = 0
     best_metric = -1.0
-    for epoch in range(config.epochs):
-        model.train()
-        for x, y in train_loader:
-            x = x.cuda()
-            y = y.cuda()
 
-            metrics = {}
-            lr = None
-            carry: Carry = model.module.initial_carry
-            for _ in range(config.cycles_per_data):
-                step += 1
-                lr = update_lr(config, optim, step, total_steps)
-
-                carry, metrics = train_step(model, carry, optim, x, y, is_autoregressive)
-
-            if RANK == 0 and progress_bar is not None and step - progress_bar.n >= config.log_interval:
-                progress_bar.update(step - progress_bar.n)
-                wandb.log({f"train/{k}": v.item() for k, v in metrics.items()} | {"train/lr": lr}, step=step)
-
-            del x, y, carry, metrics
-
-        # Eval
+    def evaluate_and_checkpoint(step: int):
+        """Eval every split, log it, and write last.pt / best.pt. Collective: every rank must call
+        this at the same step, which holds because `step` advances identically on all ranks."""
+        nonlocal best_metric
         model.eval()
         optim.swap_ema()
 
@@ -238,7 +233,7 @@ def train_single_seed(config: TrainConfig, seed: int, group_name: str, WORLD_SIZ
             state_dict = {k.replace("_orig_mod.", ""): v for k, v in model.module.state_dict().items()}
             torch.save(state_dict, os.path.join(checkpoint_dir, "last.pt"))
 
-            score = eval_metrics.get(BEST_METRIC_SPLIT)
+            score = eval_metrics.get(config.best_metric_split)
             if score is not None and score > best_metric:
                 best_metric = score
                 torch.save(state_dict, os.path.join(checkpoint_dir, "best.pt"))
@@ -246,6 +241,47 @@ def train_single_seed(config: TrainConfig, seed: int, group_name: str, WORLD_SIZ
             del state_dict
 
         optim.swap_ema()  # Swap EMA back
+        model.train()
+
+    last_eval_step = -1
+    next_eval_step = config.eval_interval if config.eval_interval is not None else None
+
+    for epoch in range(config.epochs):
+        model.train()
+        for x, y in train_loader:
+            x = x.cuda()
+            y = y.cuda()
+
+            metrics = {}
+            lr = None
+            carry: Carry = model.module.initial_carry
+            for _ in range(config.cycles_per_data):
+                step += 1
+                lr = update_lr(config, optim, step, total_steps)
+
+                carry, metrics = train_step(model, carry, optim, x, y, is_autoregressive)
+
+            if RANK == 0 and progress_bar is not None and step - progress_bar.n >= config.log_interval:
+                progress_bar.update(step - progress_bar.n)
+                wandb.log({f"train/{k}": v.item() for k, v in metrics.items()} | {"train/lr": lr}, step=step)
+
+            del x, y, carry, metrics
+
+            # Step-based eval, when configured (see `eval_interval`)
+            if next_eval_step is not None and step >= next_eval_step:
+                evaluate_and_checkpoint(step)
+                last_eval_step = step
+                while next_eval_step <= step:
+                    next_eval_step += config.eval_interval
+
+        # Per-epoch eval, the default when `eval_interval` is unset
+        if config.eval_interval is None:
+            evaluate_and_checkpoint(step)
+            last_eval_step = step
+
+    # Always finish on an eval of the final weights
+    if last_eval_step != step:
+        evaluate_and_checkpoint(step)
 
     # Close progress bar and wandb run for this seed
     if progress_bar is not None:

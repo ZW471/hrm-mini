@@ -1,0 +1,54 @@
+# Encoder-only masked auto-encoder, FLOP-matched to tuned_hrm: 88.09M params (7.00x), 14.83 GFLOP/fwd (1.00x).
+#
+# Full Sudoku-Extreme instead of the 1k subsample, holding the training budget fixed so the only
+# variable is the number of *unique* puzzles:
+#   1k   run: 1,000 puzzles x repeat 200 x 20 epochs = 4.0M augmented samples, 83,200 steps
+#   full run: 3.83M puzzles x repeat 1   x  1 epoch  = 3.8M augmented samples, ~79,800 steps
+# Same augmentation scheme, same 16 gradient steps per augmented batch, near-identical step count.
+# `eval_interval: 4160` reproduces the 1k runs' eval cadence (they evaluated every 4160 steps),
+# so the curves line up on the same x-axis; per-epoch eval would give a single point here.
+defaults:
+  - data: sudoku_full
+  - _self_
+
+run_name: mae_flops_matched_full
+
+arch:
+  name: mae@MaskedAutoEncoder
+
+  # Transformer
+  num_layers: 28  # = the 28 block-forwards HRM unrolls per forward pass
+
+  hidden_size: 512
+  intermediate_size: 2048
+  head_dim: 64
+
+  norm_eps: 1e-6
+  rope_theta: 10000.0
+
+  forward_dtype: bfloat16
+
+seeds: [1, 2, 3]
+
+cycles_per_data: 16
+epochs: 1
+eval_interval: 4160
+
+# Full Sudoku-Extreme splits are named train/test and there is no `test_hard`. Evaluate on the
+# 1k repo's 20k test_hard split instead, i.e. the exact same puzzles the 1k runs were scored on,
+# so the two settings are directly comparable. Verified: all 20,000 are a subset of the full
+# `test` split and none appear in the 3,831,994-row full train split.
+eval_dataset_name: ./downloaded-datasets/sudoku-extreme-1k
+eval_splits: [test_hard]
+best_metric_split: test_hard
+
+local_batch_size: 96
+
+lr: 1e-4
+lr_warmup_steps: 2000
+lr_min_ratio: 1.0
+
+beta1: 0.9
+beta2: 0.95
+weight_decay: 1.0
+ema: 0.999

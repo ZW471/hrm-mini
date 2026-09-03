@@ -1,0 +1,8 @@
+# Full Sudoku-Extreme (~3.8M puzzles) rather than the 1k subsample.
+# `repeat: 1` because one pass over this dataset already fills the whole step budget:
+# ~3.83M / (96*8) = ~4989 batches, x16 cycles = ~79.8k steps, vs 83.2k for the 1k runs.
+# Augmentation stays on and is sampled per batch exactly as in the 1k runs.
+name: sudoku
+dataset_name: ./downloaded-datasets/sudoku-extreme
+repeat: 1
+augment: True
