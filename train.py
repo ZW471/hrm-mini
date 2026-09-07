@@ -79,17 +79,27 @@ def model_input(x: Tensor, y: Tensor, is_autoregressive: bool) -> Tensor:
     """Decoder-only models are teacher-forced on `[question ++ answer]`; encoders only see the question."""
     return torch.cat([x, y], dim=-1) if is_autoregressive else x
 
+def readouts(y_hat: Tensor) -> Tensor:
+    """Normalise model outputs to `[batch, num_readouts, seq_len, vocab]`.
+
+    Deeply supervised models return one readout per supervision point; every other model returns a
+    single `[batch, seq_len, vocab]` set of logits. The last readout is always the final prediction.
+    """
+    return y_hat if y_hat.ndim == 4 else y_hat.unsqueeze(1)
+
 def train_step(model: nn.Module, carry: Carry, opt: torch.optim.Optimizer, x: Tensor, y: Tensor, is_autoregressive: bool = False):
     carry, y_hat = model(carry, model_input(x, y, is_autoregressive))
-    # loss (f32 for CrossEntropy)
-    loss = F.cross_entropy(y_hat.view(-1, y_hat.shape[-1]).to(torch.float32), y.view(-1).long(), reduction="mean")
+    # loss (f32 for CrossEntropy), averaged over the supervision points of deeply supervised models
+    logits = readouts(y_hat)
+    targets = y.unsqueeze(1).expand(-1, logits.shape[1], -1)
+    loss = F.cross_entropy(logits.reshape(-1, logits.shape[-1]).to(torch.float32), targets.reshape(-1).long(), reduction="mean")
     loss.backward()
     opt.step()
     opt.zero_grad()
 
-    # metrics
+    # metrics (of the final readout, i.e. what inference uses)
     with torch.no_grad():
-        preds = torch.argmax(y_hat, dim=-1)
+        preds = torch.argmax(logits[:, -1], dim=-1)
         metrics = {
             "loss": loss.detach(),
             "per_position_accuracy": torch.mean(preds == y, dtype=torch.float32),
@@ -101,7 +111,7 @@ def train_step(model: nn.Module, carry: Carry, opt: torch.optim.Optimizer, x: Te
 @torch.inference_mode()
 def run_inference(model: nn.Module, carry: Carry, x: Tensor):
     carry, y_hat = model(carry, x)
-    return carry, torch.argmax(y_hat, dim=-1)
+    return carry, torch.argmax(readouts(y_hat)[:, -1], dim=-1)
 
 @torch.inference_mode()
 def generate(model: nn.Module, x: Tensor) -> Tensor:

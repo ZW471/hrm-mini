@@ -92,11 +92,15 @@ class SwiGLU(nn.Module):
         return self.down_proj(F.silu(gate) * up)
 
 class Attention(nn.Module):
-    def __init__(self, hidden_size, head_dim, num_heads, is_causal, **kwargs):
+    def __init__(self, hidden_size, head_dim, num_heads, is_causal, qk_norm: bool = False, norm_eps: float = 1e-6, **kwargs):
         super().__init__()
         self.head_dim = head_dim
         self.num_heads = num_heads
         self.is_causal = is_causal
+        # RMS-normalising q and k per head bounds the attention logits, which stops the slow growth
+        # that shows up as mid-training loss spikes. Off by default: the HRM baselines predate it.
+        self.qk_norm = qk_norm
+        self.norm_eps = norm_eps
 
         self.qkv_proj = CastedLinear(hidden_size, self.num_heads * self.head_dim, bias=False, batch_output_dims=(3, ), **kwargs)
         self.o_proj = CastedLinear(head_dim * num_heads, hidden_size, bias=False, **kwargs)
@@ -108,6 +112,9 @@ class Attention(nn.Module):
         # Split head (last dimension of projected qkv)
         qkv = rearrange(qkv, "... (h hd) -> ... h hd", h=self.num_heads)
         query, key, value = qkv.chunk(3, dim=-1)
+        if self.qk_norm:
+            query = F.rms_norm(query, (self.head_dim, ), eps=self.norm_eps)
+            key = F.rms_norm(key, (self.head_dim, ), eps=self.norm_eps)
         # Rotary embedding
         query = apply_rotary_pos_emb(query, cos_sin)
         key = apply_rotary_pos_emb(key, cos_sin)
@@ -134,6 +141,8 @@ class TransformerConfig(pydantic.BaseModel):
     is_mlp_mixer: bool = False
     mlp_mixer_intermediate_size: int = 256
 
+    qk_norm: bool = False
+
 class TransformerBlock(nn.Module):
     def __init__(self, config: TransformerConfig) -> None:
         super().__init__()
@@ -146,7 +155,9 @@ class TransformerBlock(nn.Module):
                 hidden_size=config.hidden_size,
                 head_dim=config.head_dim,
                 num_heads=config.hidden_size // config.head_dim,
-                is_causal=config.is_causal
+                is_causal=config.is_causal,
+                qk_norm=config.qk_norm,
+                norm_eps=config.norm_eps
             )
             self.mlp = MLP(
                 hidden_size=config.hidden_size,
