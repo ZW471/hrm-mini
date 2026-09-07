@@ -1,0 +1,51 @@
+# Recurrent Transformer with 2D rotary embeddings, otherwise identical to config/tuned_rt.yaml.
+#
+# Sudoku is a 9x9 board flattened to 81 tokens, so 1D RoPE encodes a cell by its index in
+# that flattening: cells (0,8) and (1,0) look one position apart despite sharing no row,
+# column or box, while two cells in the same column are always 9 apart but never marked as
+# related. 2D RoPE rotates half of each head's channels by the row and half by the column,
+# making the attention logit a function of the 2D offset between cells. Buffers only, so
+# parameter count and FLOPs are unchanged and this stays comparable to every other arm.
+
+defaults:
+  - data: sudoku
+  - _self_
+
+run_name: tuned_rt_rope2d
+
+arch:
+  name: rt@RecurrentTransformer
+
+  # Transformer
+  num_layers: 4
+
+  hidden_size: 512
+  intermediate_size: 2048
+  head_dim: 64
+
+  norm_eps: 1e-6
+  rope_theta: 10000.0
+  # Rotate by (row, col) of the 9x9 board instead of by index into the flattened 81-cell sequence.
+  rope_2d: True
+
+  # HRM
+  cycles: 7
+  bptt: True
+
+  forward_dtype: bfloat16
+
+seeds: [1, 2, 3]
+
+cycles_per_data: 16
+epochs: 20
+
+local_batch_size: 96
+
+lr: 1e-4
+lr_warmup_steps: 2000
+lr_min_ratio: 1.0
+
+beta1: 0.9
+beta2: 0.95
+weight_decay: 1.0
+ema: 0.999

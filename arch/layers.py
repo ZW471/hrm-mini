@@ -57,12 +57,38 @@ class CastedScaledEmbedding(nn.Module):
         return F.embedding(input, self.scale * self.weight.to(self.cast_to))
 
 class RotaryEmbedding(nn.Module):
-    def __init__(self, dim, max_position_embeddings, base, device=None):
+    """RoPE over token index, or over (row, col) of a square grid when `rope_2d` is set.
+
+    The 2D variant splits each head's channels in half, rotating the first half by the token's row
+    and the second half by its column, so the attention logit depends on the 2D offset between two
+    cells rather than on their distance along the flattened sequence. Sudoku (9x9 flattened to 81
+    tokens) and Maze (30x30 to 900) are grids, and 1D RoPE places e.g. cells (0,8) and (1,0) one
+    position apart while they sit in different rows. Any leading non-grid tokens (the BOS pad) get
+    row = col = -1, a position no cell occupies.
+
+    Channel layout is chosen to survive `rotate_half`, which pairs channel i with channel i + dim/2:
+    `emb = cat(f, f)` with `f = cat(f_row, f_col)` gives [row, col, row, col], so each rotated pair
+    shares one axis and one frequency, exactly as the 1D case pairs a channel with its own copy.
+    """
+    def __init__(self, dim, max_position_embeddings, base, rope_2d: bool = False, device=None):
         super().__init__()
-        # RoPE
-        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float32, device=device) / dim))
-        t = torch.arange(max_position_embeddings, dtype=torch.float32, device=device)
-        freqs = torch.outer(t, inv_freq)
+        if rope_2d:
+            side = math.isqrt(max_position_embeddings)
+            num_prefix = max_position_embeddings - side * side
+            assert num_prefix >= 0
+            # Half the channels per axis, hence half as many frequencies per axis as the 1D case.
+            axis_dim = dim // 2
+            inv_freq = 1.0 / (base ** (torch.arange(0, axis_dim, 2, dtype=torch.float32, device=device) / axis_dim))
+
+            pos = torch.arange(max_position_embeddings, dtype=torch.float32, device=device) - num_prefix
+            row = torch.where(pos < 0, pos, torch.div(pos, side, rounding_mode="floor"))
+            col = torch.where(pos < 0, pos, pos % side)
+            freqs = torch.cat((torch.outer(row, inv_freq), torch.outer(col, inv_freq)), dim=-1)
+        else:
+            # RoPE
+            inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.float32, device=device) / dim))
+            t = torch.arange(max_position_embeddings, dtype=torch.float32, device=device)
+            freqs = torch.outer(t, inv_freq)
 
         # Different from paper, but it uses a different permutation in order to obtain the same calculation
         emb = torch.cat((freqs, freqs), dim=-1)
@@ -137,6 +163,8 @@ class TransformerConfig(pydantic.BaseModel):
 
     norm_eps: float
     rope_theta: float
+    # Rotate by (row, col) of the square grid the sequence flattens, instead of by token index.
+    rope_2d: bool = False
 
     is_mlp_mixer: bool = False
     mlp_mixer_intermediate_size: int = 256
@@ -178,7 +206,7 @@ class TransformerBlock(nn.Module):
 class Transformer(nn.Module):
     def __init__(self, config: TransformerConfig) -> None:
         super().__init__()
-        self.rotary_emb = RotaryEmbedding(config.head_dim, config.seq_len, base=config.rope_theta)
+        self.rotary_emb = RotaryEmbedding(config.head_dim, config.seq_len, base=config.rope_theta, rope_2d=config.rope_2d)
 
         self.layers = nn.ModuleList([TransformerBlock(config) for _layer_idx in range(config.num_layers)])
 
