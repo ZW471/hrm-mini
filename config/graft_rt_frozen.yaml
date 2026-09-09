@@ -1,0 +1,61 @@
+# Frozen recurrent transformer + a small trainable H-network spliced between its cycles.
+#
+# Motivation: on Sudoku-Extreme 1k the RT reaches ~59% test_hard exact match while HRM, at matched
+# FLOPs (both do 28 block-forwards per pass), reaches ~81%. The difference is that HRM has a second,
+# slower state updated between groups of fast cycles. This arm asks whether that timescale can be
+# bolted onto an *already trained* RT: freeze all 12.6M of its parameters, and train only a 2.1M
+# H-block that maintains a slow state z_H fed back into the frozen core's input.
+#
+# The graft is zero-gated at init, so the model starts bit-for-bit identical to the checkpoint
+# (verified: max|logit diff| = 0). Every point of movement is therefore the graft's doing.
+#
+# Budget matches the baselines exactly (20 epochs, 83,200 steps), so this is a like-for-like
+# comparison against tuned_rt / tuned_hrm despite training 6x fewer parameters.
+defaults:
+  - data: sudoku
+  - _self_
+
+run_name: graft_rt_frozen
+
+arch:
+  name: graft_rt@GraftedRecurrentTransformer
+
+  # Transformer (must match the pretrained checkpoint)
+  num_layers: 4
+
+  hidden_size: 512
+  intermediate_size: 2048
+  head_dim: 64
+
+  norm_eps: 1e-6
+  rope_theta: 10000.0
+
+  cycles: 7
+  bptt: True
+
+  # Graft: one narrow transformer block, run after every core cycle.
+  h_num_layers: 1
+  h_intermediate_size: 1024
+  h_period: 1
+  h_mode: inject
+
+  pretrained_ckpt: "checkpoints/tuned_rt nonchalant-malamute/seed_1/best.pt"
+  freeze_core: True
+
+  forward_dtype: bfloat16
+
+seeds: [1, 2, 3]
+
+cycles_per_data: 16
+epochs: 20
+
+local_batch_size: 96
+
+lr: 1e-4
+lr_warmup_steps: 2000
+lr_min_ratio: 1.0
+
+beta1: 0.9
+beta2: 0.95
+weight_decay: 1.0
+ema: 0.999

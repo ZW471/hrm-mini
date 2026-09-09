@@ -1,0 +1,51 @@
+# As config/graft_rt_frozen.yaml, but the pretrained core is fine-tuned alongside the graft
+# instead of being held frozen. Separates "the graft found a useful slow signal the frozen core can
+# already read" from "the graft is only useful once the core adapts to it".
+defaults:
+  - data: sudoku
+  - _self_
+
+run_name: graft_rt_sft
+
+arch:
+  name: graft_rt@GraftedRecurrentTransformer
+
+  # Transformer (must match the pretrained checkpoint)
+  num_layers: 4
+
+  hidden_size: 512
+  intermediate_size: 2048
+  head_dim: 64
+
+  norm_eps: 1e-6
+  rope_theta: 10000.0
+
+  cycles: 7
+  bptt: True
+
+  # Graft: one narrow transformer block, run after every core cycle.
+  h_num_layers: 1
+  h_intermediate_size: 1024
+  h_period: 1
+  h_mode: inject
+
+  pretrained_ckpt: "checkpoints/tuned_rt nonchalant-malamute/seed_1/best.pt"
+  freeze_core: False
+
+  forward_dtype: bfloat16
+
+seeds: [1, 2, 3]
+
+cycles_per_data: 16
+epochs: 20
+
+local_batch_size: 96
+
+lr: 1e-4
+lr_warmup_steps: 2000
+lr_min_ratio: 1.0
+
+beta1: 0.9
+beta2: 0.95
+weight_decay: 1.0
+ema: 0.999

@@ -168,8 +168,11 @@ def train_single_seed(config: TrainConfig, seed: int, group_name: str, WORLD_SIZ
         # DDP Wrap
         model = DDP(model, static_graph=True)
 
+    # Frozen arms (e.g. a grafted network on a frozen backbone) leave most parameters without a
+    # gradient; keeping them out of the optimizer avoids allocating momentum/EMA buffers for them.
+    trainable = [p for p in model.parameters() if p.requires_grad]
     optim = AdamATan2(
-        model.parameters(),
+        trainable,
         lr=torch.tensor(0.0, dtype=torch.get_default_dtype(), device="cpu"),
         betas=(config.beta1, config.beta2),
         weight_decay=config.weight_decay,
