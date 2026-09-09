@@ -1,0 +1,62 @@
+# The graft on full Sudoku-Extreme (3.83M puzzles) instead of the 1k subsample.
+#
+# On 1k the RT's gap to HRM is a *generalisation* gap, not a capacity one: the RT peaks at 70.7%
+# (epoch 6) and then overfits down to 59% while its train exact-match sits at 1.000. Grafting 2.1M
+# trainable parameters onto it there can only add capacity to a model that already has too much,
+# which is what config/graft_rt_frozen shows. Full Sudoku-Extreme removes that confound -- no arm
+# overfits it -- so this is where "does a second timescale add capability?" can actually be asked.
+#
+# Frozen base is the tuned_rt_full checkpoint (87.3% test_hard); the graft is zero-gated, so this
+# run starts exactly there and any movement is the graft's.
+defaults:
+  - data: sudoku_full
+  - _self_
+
+run_name: graft_rt_full_frozen
+
+arch:
+  name: graft_rt@GraftedRecurrentTransformer
+
+  num_layers: 4
+
+  hidden_size: 512
+  intermediate_size: 2048
+  head_dim: 64
+
+  norm_eps: 1e-6
+  rope_theta: 10000.0
+
+  cycles: 7
+  bptt: True
+
+  h_num_layers: 1
+  h_intermediate_size: 1024
+  h_period: 1
+  h_mode: inject
+
+  pretrained_ckpt: "checkpoints/tuned_rt_full aquamarine-bumblebee/seed_1/best.pt"
+  freeze_core: True
+
+  forward_dtype: bfloat16
+
+seeds: [1]
+
+cycles_per_data: 16
+epochs: 1
+eval_interval: 4160
+
+# Same 20k test_hard puzzles the 1k runs are scored on (see config/tuned_rt_full.yaml).
+eval_dataset_name: ./downloaded-datasets/sudoku-extreme-1k
+eval_splits: [test_hard]
+best_metric_split: test_hard
+
+local_batch_size: 96
+
+lr: 1e-4
+lr_warmup_steps: 2000
+lr_min_ratio: 1.0
+
+beta1: 0.9
+beta2: 0.95
+weight_decay: 1.0
+ema: 0.999
