@@ -1,0 +1,59 @@
+# Recurrent transformer + a cycle FF layer, trained from scratch.
+#
+# The question: HRM beats a parameter- and FLOP-matched recurrent transformer on Sudoku-Extreme 1k
+# (~81.3% vs ~70.7% best) purely on structure -- it runs a second, slower block between groups of
+# fast cycles. This arm bolts the cheapest possible version of that onto the RT: one post-norm
+# feed-forward block (no attention), run once per cycle, maintaining a slow state z_H that is fed
+# back into the core's input.
+#
+# Cost over the tuned_rt baseline: +1.05M parameters on 12.59M, and +8% block-forwards. Everything
+# else -- 4 core layers, 7 cycles, 20 epochs, LR, batch size, augmentation -- is the baseline's.
+defaults:
+  - data: sudoku
+  - _self_
+
+run_name: cff_mlp_tied
+
+arch:
+  name: rt_cff@RecurrentTransformerCFF
+
+  # Transformer (tuned_rt's core, unchanged)
+  num_layers: 4
+
+  hidden_size: 512
+  intermediate_size: 2048
+  head_dim: 64
+
+  norm_eps: 1e-6
+  rope_theta: 10000.0
+
+  cycles: 7
+  bptt: True
+
+  # Cycle FF layer
+  cff_layers: 1
+  cff_type: mlp
+  cff_intermediate_size: 1024
+  cff_tied: True
+  cff_period: 1
+  cff_mode: inject
+  cff_gated: False
+  cff_lr_mult: 1.0
+
+  forward_dtype: bfloat16
+
+seeds: [1]
+
+cycles_per_data: 16
+epochs: 20
+
+local_batch_size: 96
+
+lr: 1e-4
+lr_warmup_steps: 2000
+lr_min_ratio: 1.0
+
+beta1: 0.9
+beta2: 0.95
+weight_decay: 1.0
+ema: 0.999

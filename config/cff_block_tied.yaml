@@ -1,0 +1,11 @@
+# As config/cff_mlp_tied, but the cycle FF layer is a full transformer block (attention + FF),
+# which is literally what HRM's H level is. +2.10M parameters and +17% block-forwards over tuned_rt.
+# Tests whether the slow update needs to mix across board positions or only across channels.
+defaults:
+  - /cff_mlp_tied@_here_
+  - _self_
+
+run_name: cff_block_tied
+
+arch:
+  cff_type: block

@@ -1,0 +1,12 @@
+# The largest member of the family: a full transformer block per cycle, untied. +14.7M parameters,
+# slightly more than doubling tuned_rt's 12.59M. Included as the capacity ceiling of the sweep --
+# on 1k data this is the arm most likely to overfit, which is itself informative.
+defaults:
+  - /cff_mlp_tied@_here_
+  - _self_
+
+run_name: cff_block_untied
+
+arch:
+  cff_type: block
+  cff_tied: False

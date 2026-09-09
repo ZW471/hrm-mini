@@ -1,0 +1,11 @@
+# As config/cff_mlp_tied, but each cycle gets its own feed-forward layer instead of all seven
+# sharing one. HRM ties its H level across cycles; untying asks whether the gain (if any) comes from
+# the second timescale or simply from more parameters. Costs +7.3M parameters rather than +1.05M.
+defaults:
+  - /cff_mlp_tied@_here_
+  - _self_
+
+run_name: cff_mlp_untied
+
+arch:
+  cff_tied: False

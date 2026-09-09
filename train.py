@@ -136,9 +136,9 @@ def update_lr(config: TrainConfig, optim: torch.optim.Optimizer, step: int, tota
         progress = (step - config.lr_warmup_steps) / (total_steps - config.lr_warmup_steps)
         lr = config.lr * (config.lr_min_ratio + max(0.0, (1 - config.lr_min_ratio) * 0.5 * (1.0 + math.cos(math.pi * progress))))
 
-    tensor_lr = torch.tensor(lr, dtype=torch.get_default_dtype(), device="cpu")
     for param_group in optim.param_groups:
-        param_group["lr"] = tensor_lr
+        param_group["lr"] = torch.tensor(lr * param_group.get("lr_mult", 1.0),
+                                         dtype=torch.get_default_dtype(), device="cpu")
 
     return lr
 
@@ -168,11 +168,16 @@ def train_single_seed(config: TrainConfig, seed: int, group_name: str, WORLD_SIZ
         # DDP Wrap
         model = DDP(model, static_graph=True)
 
-    # Frozen arms (e.g. a grafted network on a frozen backbone) leave most parameters without a
+    # Frozen arms (e.g. a new module on a frozen backbone) leave most parameters without a
     # gradient; keeping them out of the optimizer avoids allocating momentum/EMA buffers for them.
-    trainable = [p for p in model.parameters() if p.requires_grad]
+    # A model may also split its parameters into groups carrying an `lr_mult`, so that a newly
+    # added component can train at a different rate from a pretrained backbone (see `update_lr`).
+    if hasattr(model.module, "param_groups"):
+        param_groups = model.module.param_groups()
+    else:
+        param_groups = [{"params": [p for p in model.parameters() if p.requires_grad], "lr_mult": 1.0}]
     optim = AdamATan2(
-        trainable,
+        param_groups,
         lr=torch.tensor(0.0, dtype=torch.get_default_dtype(), device="cpu"),
         betas=(config.beta1, config.beta2),
         weight_decay=config.weight_decay,
