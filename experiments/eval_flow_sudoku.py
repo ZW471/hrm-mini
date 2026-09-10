@@ -79,6 +79,7 @@ def load_model(ckpt: str) -> tuple[torch.nn.Module, BoardCodec]:
             norm_eps=args["norm_eps"], rope_theta=args["rope_theta"],
             in_channels=codec.in_channels, forward_dtype=args["forward_dtype"],
             qk_norm=args.get("qk_norm", False), conditional=args.get("conditional", False),
+            adaln=args.get("adaln", False),
             # checkpoints from before --pos-embed existed recorded a rope_2d bool
             pos_embed=args.get("pos_embed", "rope2d" if args.get("rope_2d") else "rope1d")))
         model.load_state_dict(torch.load(ckpt, map_location="cuda", weights_only=True), assign=True)
@@ -112,7 +113,8 @@ def solve_puzzles(model, codec, args, device) -> None:
             for attempt in range(args.restarts):
                 x = sde_sample(model, len(pick), 81, codec.in_channels, steps, device, gen,
                                noise, cond=cond, clamp_x1=clamp_x1, clamp_mask=mask,
-                               guidance=guide, sampler=args.sampler)
+                               guidance=guide, sampler=args.sampler, codec=codec,
+                               reveal_threshold=args.reveal_threshold, reveal_every=args.reveal_every)
                 pred = torch.where(mask, puzzles, codec.decode(x))
                 boards = pred.cpu().numpy()
                 # A candidate is ACCEPTED on checkable evidence only: it is a valid board and it
@@ -142,6 +144,10 @@ def main():
                         help="Stochastic sampler noise levels; 0 is the deterministic Euler ODE")
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--sampler", type=str, default="euler", choices=["euler", "heun", "rk4"])
+    parser.add_argument("--reveal-threshold", type=float, default=None,
+                        help="Commit cells whose endpoint estimate is this decided (0-1) and treat them "
+                             "as givens for the rest of sampling; None disables")
+    parser.add_argument("--reveal-every", type=int, default=10, help="Steps between reveal passes")
     parser.add_argument("--solve", action="store_true", help="Solve puzzles by inpainting instead of generating")
     parser.add_argument("--solve-split", type=str, default="test_hard")
     parser.add_argument("--guidance", type=float, nargs="+", default=[1.0], help="Classifier-free guidance scales")

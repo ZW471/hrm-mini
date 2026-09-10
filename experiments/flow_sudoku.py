@@ -62,8 +62,8 @@ import coolname
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from adam_atan2 import AdamATan2
-from arch.layers import (CastedLinear, CastedScaledEmbedding, MLP, Transformer,
-                         TransformerConfig, trunc_normal_init_)
+from arch.layers import (Attention, CastedLinear, CastedScaledEmbedding, CosSin, MLP,
+                         RotaryEmbedding, Transformer, TransformerConfig, trunc_normal_init_)
 from dataset.sudoku import create_dataloader
 
 WANDB_PROJECT = "sudoku-flow-matching"
@@ -115,6 +115,52 @@ class NoRotaryEmbedding(nn.Module):
     def forward(self):
         return self.cos_cached, self.sin_cached
 
+class AdaLNBlock(nn.Module):
+    """DiT-style adaLN-Zero block, built from the same `arch.layers` pieces as the stock block.
+
+    Instead of adding the timestep embedding to the token stream once at the input, each block
+    derives six modulation vectors from it -- scale/shift for the two sub-layer norms and a gate
+    on each residual branch. The gate projection is zero-initialised, so every block starts as
+    the identity and conditioning is learned rather than imposed. This is generic DiT machinery;
+    it knows nothing about the task.
+    """
+    def __init__(self, config: TransformerConfig) -> None:
+        super().__init__()
+        self.hidden_size = config.hidden_size
+        self.norm_eps = config.norm_eps
+        self.attn = Attention(hidden_size=config.hidden_size, head_dim=config.head_dim,
+                              num_heads=config.hidden_size // config.head_dim,
+                              is_causal=config.is_causal, qk_norm=config.qk_norm,
+                              norm_eps=config.norm_eps)
+        self.mlp = MLP(hidden_size=config.hidden_size, intermediate_size=config.intermediate_size)
+        # zero-init => identity at step 0 (the "Zero" in adaLN-Zero)
+        self.modulation = CastedLinear(config.hidden_size, 6 * config.hidden_size, bias=True)
+        with torch.no_grad():
+            self.modulation.weight.zero_()
+
+    def forward(self, x: Tensor, cos_sin: CosSin, t_emb: Tensor) -> Tensor:
+        shift_a, scale_a, gate_a, shift_m, scale_m, gate_m = \
+            self.modulation(t_emb).unsqueeze(1).chunk(6, dim=-1)
+
+        def norm(h: Tensor, shift: Tensor, scale: Tensor) -> Tensor:
+            return F.rms_norm(h, (self.hidden_size, ), eps=self.norm_eps) * (1 + scale) + shift
+
+        x = x + gate_a * self.attn(norm(x, shift_a, scale_a), cos_sin=cos_sin)
+        return x + gate_m * self.mlp(norm(x, shift_m, scale_m))
+
+class AdaLNTransformer(nn.Module):
+    """Same interface as `arch.layers.Transformer`, but conditioned per block."""
+    def __init__(self, config: TransformerConfig) -> None:
+        super().__init__()
+        self.rotary_emb = RotaryEmbedding(config.head_dim, config.seq_len, base=config.rope_theta)
+        self.layers = nn.ModuleList([AdaLNBlock(config) for _ in range(config.num_layers)])
+
+    def forward(self, h: Tensor, t_emb: Tensor) -> Tensor:
+        cos_sin = self.rotary_emb()
+        for layer in self.layers:
+            h = layer(h, cos_sin, t_emb)
+        return h
+
 class FlowTransformerConfig(TransformerConfig):
     in_channels: int
     forward_dtype: str
@@ -122,6 +168,7 @@ class FlowTransformerConfig(TransformerConfig):
     # "rope2d": axial RoPE over the 9x9 grid | "rope1d": stock RoPE over the flattened 81
     # positions | "learned": a free [seq_len, hidden] parameter added to the input, no rotation
     pos_embed: str = "rope2d"
+    adaln: bool = False
     grid_height: int = 9
     grid_width: int = 9
     conditional: bool = False
@@ -139,7 +186,7 @@ class SudokuFlowTransformer(nn.Module):
         self.dtype = getattr(torch, config.forward_dtype)
 
         # Backbone
-        self.core = Transformer(config)
+        self.core = AdaLNTransformer(config) if config.adaln else Transformer(config)
         self.pos_embed = None
         if config.pos_embed == "rope2d":
             # Same interface, grid-aware positions
@@ -168,8 +215,11 @@ class SudokuFlowTransformer(nn.Module):
             h = h + self.pos_embed.to(self.dtype)
         if self.cond_embed is not None:
             h = h + self.cond_embed(cond)
-        h = h + self.t_mlp(timestep_embedding(t, self.config.hidden_size, self.config.rope_theta).to(self.dtype))[:, None, :]
-        return self.out_proj(self.core(h))
+        t_emb = self.t_mlp(timestep_embedding(t, self.config.hidden_size, self.config.rope_theta).to(self.dtype))
+        if self.config.adaln:
+            # conditioning enters through each block's modulation, not the token stream
+            return self.out_proj(self.core(h, t_emb))
+        return self.out_proj(self.core(h + t_emb[:, None, :]))
 
 # [Data: solutions in memory, augmented on GPU]
 def load_solutions(dataset_dir: str, split: str = "train") -> np.ndarray:
@@ -317,21 +367,25 @@ def _drift(model, x, t, num, cond, guidance, noise_scale):
         v_uncond = model(x, t_batch, torch.zeros_like(cond)).float()
         v = v_uncond + guidance * (v - v_uncond)
     if noise_scale <= 0:
-        return v
-    return v + 0.5 * (noise_scale ** 2) * (1.0 - t) * (t * v - x)
+        return v, v
+    return v + 0.5 * (noise_scale ** 2) * (1.0 - t) * (t * v - x), v
 
 @torch.inference_mode()
 def sde_sample(model: nn.Module, num_samples: int, seq_len: int, in_channels: int, steps: int,
                device: torch.device, generator: Optional[torch.Generator] = None,
                noise_scale: float = 1.0, cond: Optional[Tensor] = None,
                clamp_x1: Optional[Tensor] = None, clamp_mask: Optional[Tensor] = None,
-               guidance: float = 1.0, sampler: str = "euler") -> Tensor:
+               guidance: float = 1.0, sampler: str = "euler", codec: Optional["BoardCodec"] = None,
+               reveal_threshold: Optional[float] = None, reveal_every: int = 10,
+               reveal_min_t: float = 0.1) -> Tensor:
     """Stochastic sampler for the same trained velocity field.
 
     For the linear path x_t = (1-t) x_0 + t x_1 with x_0 ~ N(0, I) the score is recoverable from
     the velocity: E[x_0 | x_t] = x_t - t v, so
 
         score(x, t) = -E[x_0 | x_t] / (1 - t) = (t v(x, t) - x) / (1 - t).
+
+    Returns (drift, raw_velocity); the raw velocity is what the endpoint estimate needs.
 
     Any g(t) >= 0 then gives an SDE with the *same* marginals as the probability-flow ODE:
 
@@ -356,21 +410,40 @@ def sde_sample(model: nn.Module, num_samples: int, seq_len: int, in_channels: in
         dw = (noise_scale * (1.0 - t) * math.sqrt(dt)
               * torch.randn(x.shape, device=device, generator=generator)) if noise_scale > 0 else 0.0
 
-        k1 = _drift(model, x, t, num_samples, cond, guidance, noise_scale)
+        k1, v1 = _drift(model, x, t, num_samples, cond, guidance, noise_scale)
         if sampler == "euler":
             x = x + k1 * dt + dw
         elif sampler == "heun":                       # 2nd order: predictor, then trapezoid
             x_pred = x + k1 * dt + dw
-            k2 = _drift(model, x_pred, t_next, num_samples, cond, guidance, noise_scale)
+            k2, _ = _drift(model, x_pred, t_next, num_samples, cond, guidance, noise_scale)
             x = x + 0.5 * (k1 + k2) * dt + dw
         elif sampler == "rk4":                        # classical RK4 on the drift
             half = t + 0.5 * dt
-            k2 = _drift(model, x + 0.5 * dt * k1 + 0.5 * dw, half, num_samples, cond, guidance, noise_scale)
-            k3 = _drift(model, x + 0.5 * dt * k2 + 0.5 * dw, half, num_samples, cond, guidance, noise_scale)
-            k4 = _drift(model, x + dt * k3 + dw, t_next, num_samples, cond, guidance, noise_scale)
+            k2, _ = _drift(model, x + 0.5 * dt * k1 + 0.5 * dw, half, num_samples, cond, guidance, noise_scale)
+            k3, _ = _drift(model, x + 0.5 * dt * k2 + 0.5 * dw, half, num_samples, cond, guidance, noise_scale)
+            k4, _ = _drift(model, x + dt * k3 + dw, t_next, num_samples, cond, guidance, noise_scale)
             x = x + (dt / 6.0) * (k1 + 2 * k2 + 2 * k3 + k4) + dw
         else:
             raise ValueError(f"unknown sampler: {sampler}")
+
+        # Adaptive reveal: commit the cells whose endpoint estimate is already decided, and treat
+        # them as extra givens for the rest of the trajectory. The model then re-reads a
+        # more-constrained board on every subsequent step, so the remaining cells only have to be
+        # easier than the ones already committed -- iterative computation in place of one hard
+        # shot. Nothing here knows about Sudoku: it freezes coordinates whose value is settled.
+        if reveal_threshold is not None and codec is not None and t >= reveal_min_t \
+                and (i % reveal_every == 0):
+            x1_hat = x + (1.0 - t_next) * v1                       # where the flow is headed
+            top2 = x1_hat.topk(2, dim=-1).values
+            # margin in units of a clean one-hot gap: 1.0 means fully decided
+            confidence = (top2[..., 0] - top2[..., 1]) * codec.ONEHOT_STD
+            newly = confidence > reveal_threshold
+            if clamp_mask is not None:
+                newly = newly & ~clamp_mask
+            if newly.any():
+                revealed = codec.encode(x1_hat.argmax(dim=-1) + 1)
+                clamp_x1 = revealed if clamp_x1 is None else torch.where(newly[..., None], revealed, clamp_x1)
+                clamp_mask = newly if clamp_mask is None else (clamp_mask | newly)
     return x
 
 # [Sudoku validity metrics]
@@ -454,7 +527,7 @@ def evaluate_conditional(net: nn.Module, codec: "BoardCodec", args, device: torc
         clamp_x1 = codec.encode(cond.clamp_min(1))
     x = sde_sample(net, cond.shape[0], 81, codec.in_channels, args.sample_steps, device,
                    generator, args.noise_scale, cond=cond, clamp_x1=clamp_x1, clamp_mask=clamp_mask,
-                   guidance=args.guidance)
+                   guidance=args.guidance, sampler=args.sampler)
     pred = codec.decode(x)
     if args.clamp_givens:      # the givens are known; report them as given
         pred = torch.where(cond > 0, cond, pred)
@@ -472,11 +545,12 @@ def evaluate_conditional(net: nn.Module, codec: "BoardCodec", args, device: torc
     if world_size > 1:
         dist.all_reduce(stats)
     n_exact, n_cell, n_given, n_boards, n_cells, n_givens = stats.tolist()
+    split = args.eval_split
     return {
-        "exact_match": n_exact / n_boards,
-        "cell_accuracy": n_cell / n_cells,
-        "givens_respected": n_given / max(n_givens, 1.0),
-        "valid_board_rate": board_metrics(boards)["valid_board_rate"],
+        f"{split}_exact_match": n_exact / n_boards,      # the key the HRM baselines log
+        f"{split}_cell_accuracy": n_cell / n_cells,
+        f"{split}_givens_respected": n_given / max(n_givens, 1.0),
+        f"{split}_valid_board_rate": board_metrics(boards)["valid_board_rate"],
     }
 
 @torch.inference_mode()
@@ -497,6 +571,19 @@ def evaluate(net: nn.Module, codec: BoardCodec, args, device: torch.device,
     boards_np = boards.cpu().numpy()
     return board_metrics(boards_np), boards_np
 
+def log_wandb(payload: dict, step: int, allow: Optional[set[str]]) -> None:
+    """Log to wandb, optionally restricted to an allowlist of metric keys.
+
+    Sharing a project with the HRM baselines means sharing their panels. Only
+    `eval/<split>_exact_match` means the same thing for both model families -- this model's loss is
+    a velocity MSE, not a cross-entropy, and its train accuracy is a one-step endpoint estimate --
+    so `--wandb-keys` keeps a flow run from either adding panels or polluting existing ones.
+    """
+    if allow is not None:
+        payload = {k: v for k, v in payload.items() if k in allow}
+    if payload:
+        wandb.log(payload, step=step)
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     # Data (HRM pipeline)
@@ -513,17 +600,23 @@ def main():
     parser.add_argument("--rope-theta", type=float, default=10000.0)
     parser.add_argument("--qk-norm", action=argparse.BooleanOptionalAction, default=True,
                         help="RMS-normalise q/k per head; bounds attention logits and stops mid-training loss spikes")
+    parser.add_argument("--adaln", action="store_true",
+                        help="DiT-style adaLN-Zero timestep conditioning instead of an additive embedding")
     parser.add_argument("--pos-embed", type=str, default="rope2d", choices=["rope2d", "rope1d", "learned"],
                         help="How positions enter: axial 2D RoPE over the grid, stock 1D RoPE, or a learned input embedding")
     parser.add_argument("--forward-dtype", type=str, default="bfloat16")
     # Flow matching
     parser.add_argument("--t-schedule", type=str, default="uniform", choices=["uniform", "logit_normal"])
     parser.add_argument("--sample-steps", type=int, default=100, help="Integration steps used when sampling")
+    parser.add_argument("--sampler", type=str, default="euler", choices=["euler", "heun", "rk4"])
     parser.add_argument("--noise-scale", type=float, default=0.0,
                         help="Stochastic sampler noise level used at eval; 0 is the deterministic ODE")
     parser.add_argument("--conditional", action="store_true",
                         help="Condition on a puzzle and generate its solution (the HRM task)")
     parser.add_argument("--eval-split", type=str, default="test_hard", help="Split for conditional eval")
+    parser.add_argument("--eval-dataset-name", type=str, default=None,
+                        help="Directory the eval split comes from; defaults to --dataset-name. Lets a "
+                             "model trained on the full set be scored on the same test_hard as HRM.")
     parser.add_argument("--cond-dropout", type=float, default=0.0,
                         help="Probability of dropping the puzzle during training; enables guidance at sampling")
     parser.add_argument("--guidance", type=float, default=1.0,
@@ -547,6 +640,11 @@ def main():
     parser.add_argument("--run-name", type=str, default=None)
     parser.add_argument("--log-interval", type=int, default=50)
     parser.add_argument("--eval-interval", type=int, default=2000)
+    parser.add_argument("--wandb-keys", type=str, nargs="*", default=None,
+                        help="Only log these metric keys (e.g. eval/test_hard_exact_match), so a run "
+                             "in a shared project neither adds panels nor pollutes existing ones")
+    parser.add_argument("--wandb-project", type=str, default=WANDB_PROJECT,
+                        help="Use 'sudoku' to sit alongside the HRM / MAE / AR baselines")
     parser.add_argument("--no-wandb", action="store_true")
     parser.add_argument("--no-compile", action="store_true")
     args = parser.parse_args()
@@ -577,7 +675,7 @@ def main():
         train_q, train_a = load_pairs(args.dataset_name, "train")
         puzzles = torch.from_numpy(train_q.astype(np.int64)).to(device)
         solutions = torch.from_numpy(train_a.astype(np.int64)).to(device)
-        test_q, test_a = load_pairs(args.dataset_name, args.eval_split)
+        test_q, test_a = load_pairs(args.eval_dataset_name or args.dataset_name, args.eval_split)
         pick = np.random.default_rng(0).permutation(len(test_q))[:max(args.eval_samples, 1) * 4]
         test_puzzles = torch.from_numpy(test_q[pick].astype(np.int64)).to(device)
         test_solutions = torch.from_numpy(test_a[pick].astype(np.int64)).to(device)
@@ -600,6 +698,7 @@ def main():
             in_channels=codec.in_channels,
             forward_dtype=args.forward_dtype,
             pos_embed=args.pos_embed,
+            adaln=args.adaln,
             conditional=args.conditional,
             qk_norm=args.qk_norm,
         ))
@@ -617,7 +716,11 @@ def main():
         ema=args.ema if args.ema and args.ema > 0 else None,
     )
 
-    checkpoint_dir = os.path.join("checkpoints", run_name)
+    wandb_keys = set(args.wandb_keys) if args.wandb_keys else None
+    # One directory per seed under the run name, exactly as `train.py` groups the HRM baselines, so
+    # a multi-seed sweep sharing a single `--run-name` (and so a single wandb group) does not have
+    # its seeds overwrite each other's checkpoints.
+    checkpoint_dir = os.path.join("checkpoints", run_name, f"seed_{args.seed}")
     use_wandb = (rank == 0) and not args.no_wandb
     if rank == 0:
         os.makedirs(checkpoint_dir, exist_ok=True)
@@ -627,7 +730,7 @@ def main():
               f"{solutions.shape[0]} boards, {args.local_batch_size * world_size} global batch, "
               f"{args.train_steps} steps", flush=True)
         if use_wandb:
-            wandb.init(project=WANDB_PROJECT, name=run_name, group=run_name,
+            wandb.init(project=args.wandb_project, name=run_name, group=run_name,
                        config=vars(args) | {"num_params": num_params, "world_size": world_size},
                        settings=wandb.Settings(x_disable_stats=True))
 
@@ -650,12 +753,13 @@ def main():
                 print(render_boards(boards, max_boards=1), flush=True)
                 log["eval/samples"] = wandb.Html(f"<pre>{render_boards(boards)}</pre>")
             if use_wandb:
-                wandb.log(log, step=step)
+                log_wandb(log, step, wandb_keys)
 
             state_dict = {k.replace("_orig_mod.", ""): v for k, v in
                           (model.module if world_size > 1 else model).state_dict().items()}
             torch.save(state_dict, os.path.join(checkpoint_dir, "last.pt"))
-            score = metrics["exact_match"] if args.conditional else metrics["valid_board_rate"]
+            score = (metrics[f"{args.eval_split}_exact_match"] if args.conditional
+                     else metrics["valid_board_rate"])
             if score > best_valid:
                 best_valid = score
                 torch.save(state_dict, os.path.join(checkpoint_dir, "best.pt"))
@@ -701,14 +805,22 @@ def main():
 
         if step % args.log_interval == 0:
             with torch.no_grad():
-                # How often the model's current endpoint estimate decodes to the right digit
-                cell_acc = (codec.decode(x1_hat) == codec.decode(x1)).float().mean()
-                metrics = {"train/loss": loss.item(), "train/x1_cell_accuracy": cell_acc.item(),
+                # Training-time accuracy of the model's endpoint estimate, named to match the keys
+                # the HRM baselines log. Note the difference in meaning: HRM reads a single
+                # teacher-forced forward pass, whereas this is read off x1_hat at the randomly
+                # sampled flow time t -- trivial as t -> 1, impossible as t -> 0 -- so it is
+                # averaged over noise levels and is NOT the same quantity despite the shared name.
+                correct = codec.decode(x1_hat) == codec.decode(x1)
+                metrics = {"train/loss": loss.item(),
+                           "train/per_position_accuracy": correct.float().mean().item(),
+                           "train/exact_match": correct.all(dim=-1).float().mean().item(),
                            "train/grad_norm": grad_norm.item(), "train/lr": lr}
-            progress_bar.set_postfix(loss=f"{metrics['train/loss']:.4f}", acc=f"{metrics['train/x1_cell_accuracy']:.3f}",
+            progress_bar.set_postfix(loss=f"{metrics['train/loss']:.4f}",
+                                     acc=f"{metrics['train/per_position_accuracy']:.3f}",
+                                     em=f"{metrics['train/exact_match']:.3f}",
                                      gnorm=f"{metrics['train/grad_norm']:.2f}")
             if use_wandb:
-                wandb.log(metrics, step=step)
+                log_wandb(metrics, step, wandb_keys)
 
         if step % args.eval_interval == 0 or step == args.train_steps:
             best_valid = run_eval_and_save(step, best_valid)
