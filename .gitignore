@@ -79,3 +79,6 @@ Thumbs.db
 desktop.ini
 
 
+
+# LLM-baseline virtualenv
+.venv-llm/
