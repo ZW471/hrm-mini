@@ -67,6 +67,11 @@ class TrainConfig(pydantic.BaseModel):
     # Eval split that "best.pt" is selected on (must be one of `eval_splits`)
     best_metric_split: str = "test_hard"
 
+    # Loss weight on the FINAL readout of a deeply supervised model; the remaining `1 - w` is spread
+    # evenly over the earlier readouts. None (default) weights every readout equally, i.e. w = 1/R.
+    # w = 1.0 supervises only the final readout, which is what `rt@RecurrentTransformer` does.
+    final_readout_weight: Optional[float] = None
+
 # [Utils]
 def load_module(identifier: str):
     module_path, class_name = identifier.split('@')
@@ -87,12 +92,22 @@ def readouts(y_hat: Tensor) -> Tensor:
     """
     return y_hat if y_hat.ndim == 4 else y_hat.unsqueeze(1)
 
-def train_step(model: nn.Module, carry: Carry, opt: torch.optim.Optimizer, x: Tensor, y: Tensor, is_autoregressive: bool = False):
+def readout_loss(logits: Tensor, y: Tensor) -> Tensor:
+    """Mean cross-entropy (in f32) of `[batch, num_readouts, seq_len, vocab]` against `y`."""
+    targets = y.unsqueeze(1).expand(-1, logits.shape[1], -1)
+    return F.cross_entropy(logits.reshape(-1, logits.shape[-1]).to(torch.float32), targets.reshape(-1).long(), reduction="mean")
+
+def train_step(model: nn.Module, carry: Carry, opt: torch.optim.Optimizer, x: Tensor, y: Tensor, is_autoregressive: bool = False, final_readout_weight: Optional[float] = None):
     carry, y_hat = model(carry, model_input(x, y, is_autoregressive))
     # loss (f32 for CrossEntropy), averaged over the supervision points of deeply supervised models
     logits = readouts(y_hat)
-    targets = y.unsqueeze(1).expand(-1, logits.shape[1], -1)
-    loss = F.cross_entropy(logits.reshape(-1, logits.shape[-1]).to(torch.float32), targets.reshape(-1).long(), reduction="mean")
+    if final_readout_weight is None or logits.shape[1] == 1:
+        loss = readout_loss(logits, y)
+    else:
+        # Put `w` on the final readout and spread `1 - w` over the earlier ones. w = 1/R reproduces
+        # the equal-weight average above; w = 1 supervises only the final readout, as RT does.
+        w = final_readout_weight
+        loss = w * readout_loss(logits[:, -1:], y) + (1.0 - w) * readout_loss(logits[:, :-1], y)
     loss.backward()
     opt.step()
     opt.zero_grad()
@@ -277,7 +292,7 @@ def train_single_seed(config: TrainConfig, seed: int, group_name: str, WORLD_SIZ
                 step += 1
                 lr = update_lr(config, optim, step, total_steps)
 
-                carry, metrics = train_step(model, carry, optim, x, y, is_autoregressive)
+                carry, metrics = train_step(model, carry, optim, x, y, is_autoregressive, config.final_readout_weight)
 
             if RANK == 0 and progress_bar is not None and step - progress_bar.n >= config.log_interval:
                 progress_bar.update(step - progress_bar.n)

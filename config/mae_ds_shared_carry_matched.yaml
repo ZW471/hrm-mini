@@ -1,0 +1,65 @@
+# `mae_ds_shared_inject_matched` + RECURRENT CARRY: the final hidden state is carried (detached)
+# across the 16 supervision steps of a batch and across 16 rounds at eval, so the model refines its
+# own previous state instead of restarting from the embedding every time. That is HRM/RT's deep
+# supervision along *recurrence*, here stacked on top of this model's supervision along depth.
+#
+# Still 12.59M params (1.00x) and 14.83 GFLOP per forward (1.00x), matched to tuned_hrm -- but like
+# HRM and RT it now spends `cycles_per_data` (16) forwards per sample, at training and at eval.
+#
+# What still separates this from tuned_rt: gradient is cut at every supervision point inside the
+# unrolled pass (4 blocks deep, vs RT's bptt through all 7 cycles), and all 7 readouts are
+# supervised rather than only the final state.
+defaults:
+  - data: sudoku
+  - _self_
+
+run_name: mae_ds_shared_carry_matched
+
+arch:
+  name: mae_ds_shared@SharedDeeplySupervisedMaskedAutoEncoder
+
+  # Transformer: 4 distinct blocks (= HRM's 2 H-level + 2 L-level layers), shared by all 28
+  # block-forwards of a pass. num_layers * num_unrolls = 4 * 7 = 28, the block-forward count HRM
+  # unrolls per forward pass.
+  num_layers: 4
+  num_unrolls: 7
+
+  hidden_size: 512
+  intermediate_size: 2048
+  head_dim: 64
+
+  norm_eps: 1e-6
+  rope_theta: 10000.0
+
+  # Deep supervision: read out once per complete pass through the shared stack, i.e. 28 / 4 = 7
+  # supervision points, the last of which is the final block-forward.
+  layers_per_segment: 4
+  detach_segments: True
+
+  # Re-present the embedded input at every supervision point
+  inject_input: True
+  # Carry the final hidden state across the `cycles_per_data` supervision steps (and eval rounds)
+  use_carry: True
+
+  forward_dtype: bfloat16
+
+# Like tuned_hrm/tuned_rt: 16 gradient steps per batch over a carried state, so `repeat` goes back
+# to 200. Optimizer steps, samples seen and eval frequency still match tuned_hrm.
+data:
+  repeat: 200
+
+seeds: [1, 2, 3]
+
+cycles_per_data: 16
+epochs: 20
+
+local_batch_size: 96
+
+lr: 1e-4
+lr_warmup_steps: 2000
+lr_min_ratio: 1.0
+
+beta1: 0.9
+beta2: 0.95
+weight_decay: 1.0
+ema: 0.999
