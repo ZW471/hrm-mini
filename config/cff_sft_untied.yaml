@@ -1,0 +1,13 @@
+# config/cff_sft with a separate cycle FF layer per cycle rather than one shared across all seven.
+# HRM ties its H level, so untying tests whether the slow state benefits from a cycle-specific
+# update -- a schedule of seven distinct refinements -- at 7x the added parameters (14.7M vs 2.1M).
+defaults:
+  - /cff_sft@_here_
+  - _self_
+
+run_name: cff_sft_untied
+
+arch:
+  cff_tied: False
+
+seeds: [1]

@@ -1,0 +1,12 @@
+# The control config/cff_sft is measured against: the same checkpoint resumed for the same budget
+# with no cycle FF layer at all (cff_layers: 0 leaves the plain RecurrentTransformer). Any gain the
+# cycle FF arms show over this line is the layer, not the extra training they also receive.
+# Seed 1 peaked at 70.02% at epoch 1 -- below its own 70.87% starting point -- then decayed.
+defaults:
+  - /cff_sft@_here_
+  - _self_
+
+run_name: rt_sft
+
+arch:
+  cff_layers: 0

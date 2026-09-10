@@ -1,0 +1,14 @@
+# config/cff_sft with the cycle FF layer training 10x faster than the pretrained core it is being
+# grafted onto. The core is already converged and the layer is randomly initialised behind a zero
+# gate, so a single shared LR is a compromise between the two; this asks whether the new component
+# is simply undertrained at the backbone's rate.
+defaults:
+  - /cff_sft@_here_
+  - _self_
+
+run_name: cff_sft_lr10
+
+arch:
+  cff_lr_mult: 10.0
+
+seeds: [1]

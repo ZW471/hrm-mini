@@ -1,0 +1,65 @@
+# Cycle FF layer added to an already-trained recurrent transformer, fine-tuned together.
+#
+# This is the only configuration in the sweep that beat its own starting point. Seed 1 reached
+# 72.31% at epoch 4 from a 70.87% frozen checkpoint, against 70.02% for the identical resume with
+# no cycle FF (config/rt_sft) -- +2.29 over the matched control, so the gain is not just the second
+# training budget. Freezing the core instead fails outright: the inject variant falls from the
+# first eval, the inline variant sits flat at ~69.4% for 20 epochs.
+#
+# The layer is zero-gated and z_H starts at zero, so the run begins bit-for-bit identical to the
+# checkpoint and "did it help?" is answerable against 70.87% directly.
+#
+# 8 epochs, not 20: every arm here peaks by epoch 4-6 and then overfits 1k data. Post-warmup LR is
+# constant (lr_min_ratio: 1.0) and warmup is step-based, so these are exactly the first 8 epochs of
+# a 20-epoch run, not a different schedule.
+defaults:
+  - data: sudoku
+  - _self_
+
+run_name: cff_sft
+
+arch:
+  name: rt_cff@RecurrentTransformerCFF
+
+  num_layers: 4
+
+  hidden_size: 512
+  intermediate_size: 2048
+  head_dim: 64
+
+  norm_eps: 1e-6
+  rope_theta: 10000.0
+
+  cycles: 7
+  bptt: True
+
+  # Cycle FF layer: a full transformer block, shared across cycles, zero-gated onto the slow state.
+  cff_layers: 1
+  cff_type: block
+  cff_intermediate_size: 1024
+  cff_tied: True
+  cff_period: 1
+  cff_mode: inject
+  cff_gated: True
+  cff_lr_mult: 1.0
+
+  pretrained_ckpt: "checkpoints/tuned_rt nonchalant-malamute/seed_1/best.pt"
+  freeze_core: False
+
+  forward_dtype: bfloat16
+
+seeds: [1, 2, 3]
+
+cycles_per_data: 16
+epochs: 8
+
+local_batch_size: 96
+
+lr: 1e-4
+lr_warmup_steps: 2000
+lr_min_ratio: 1.0
+
+beta1: 0.9
+beta2: 0.95
+weight_decay: 1.0
+ema: 0.999

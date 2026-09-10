@@ -42,7 +42,7 @@ arch:
 
   forward_dtype: bfloat16
 
-seeds: [1]
+seeds: [1, 2, 3]
 
 cycles_per_data: 16
 epochs: 20
