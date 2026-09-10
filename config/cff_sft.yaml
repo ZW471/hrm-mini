@@ -43,7 +43,9 @@ arch:
   cff_gated: True
   cff_lr_mult: 1.0
 
-  pretrained_ckpt: "checkpoints/tuned_rt nonchalant-malamute/seed_1/best.pt"
+  # checkpoints/ is gitignored, so this path does not survive a clone. Point RT_CKPT at a
+  # tuned_rt best.pt on this machine (see CYCLE_FF.md), or override arch.pretrained_ckpt.
+  pretrained_ckpt: ${oc.env:RT_CKPT,checkpoints/tuned_rt nonchalant-malamute/seed_1/best.pt}
   freeze_core: False
 
   forward_dtype: bfloat16

@@ -1,4 +1,5 @@
 from typing import Any, Optional
+import os
 
 import torch
 from torch import nn
@@ -132,6 +133,14 @@ class RecurrentTransformerCFF(nn.Module):
                 module.requires_grad_(False)
 
     def _load_pretrained(self, path: str) -> None:
+        if not os.path.exists(path):
+            raise FileNotFoundError(
+                f"pretrained_ckpt not found: {path}\n"
+                "Checkpoints are gitignored and do not survive a clone. Train a recurrent "
+                "transformer first (`torchrun --nproc-per-node 8 train.py --config-name tuned_rt "
+                "seeds=[1]`), then point this arm at it:\n"
+                "  export RT_CKPT=\"checkpoints/<tuned_rt run dir>/seed_1/best.pt\"\n"
+                "See CYCLE_FF.md for the full procedure.")
         state_dict = torch.load(path, map_location="cpu", weights_only=True)
         missing, unexpected = self.load_state_dict(state_dict, strict=False)
         # The checkpoint is a plain RT, so it may only be missing the cycle FF layers' own parameters.

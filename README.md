@@ -48,6 +48,12 @@ Sudoku-Extreme 1000 examples. It should take about 4 GPU*hours for H100 (~30 min
 OMP_NUM_THREADS=1 MKL_NUM_THREADS=1 uv run torchrun --nproc-per-node 8 train.py --config-name tuned_hrm
 ```
 
+## Cycle FF layers (recurrent transformer + an HRM-style H block)
+
+An exploration of whether adding a small extra network between a recurrent transformer's cycles
+recovers any of HRM's advantage over it. See [CYCLE_FF.md](CYCLE_FF.md) for the architecture,
+results so far, and how to run and extend the experiments.
+
 ## Ablation studies
 
 HRM Full: See above
