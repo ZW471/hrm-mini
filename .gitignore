@@ -82,3 +82,7 @@ desktop.ini
 
 # LLM-baseline virtualenv
 .venv-llm/
+.venv-vllm/
+
+# reasoning-baseline rollouts (large JSONL of token ids)
+rollouts/
