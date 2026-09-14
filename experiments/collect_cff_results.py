@@ -12,8 +12,12 @@ import statistics
 
 PROJECT = "zhiyuwang-university-of-cambridge/sudoku"
 # Accuracy of the pretrained checkpoint the fine-tuned arms resume from, measured with eval.py.
-# They are zero-gated at init, so they provably start exactly here.
-SFT_INIT = 0.7087
+# They are zero-gated at init, so they provably start exactly here. NOTE: this is a single constant
+# over runs that do not all share an init. It tracks `malachite-saluki` (0.6977), used by every run
+# from 2026-09-10 on; the four earlier resume runs (rt_sft n=1, cff_sft n=1, and the two frozen-core
+# grafts) started from `nonchalant-malamute` at 0.7087, so their `vs init` reads 1.1 too high.
+# Pass --arms to score one init's runs at a time if that matters.
+SFT_INIT = 0.6977
 ORDER = ["tuned_hrm", "tuned_rt", "cff_mlp_tied", "cff_mlp_untied", "cff_block_tied",
          "cff_block_untied", "rt_sft", "cff_sft", "cff_sft_lr10", "cff_sft_untied"]
 RESUMES = {"rt_sft", "cff_sft", "cff_sft_lr10", "cff_sft_untied"}

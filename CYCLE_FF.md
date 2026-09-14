@@ -56,33 +56,69 @@ recurrent steps (detached, like the RT's `z`).
 | arm | params | vs RT | best | @ep | last |
 |---|---|---|---|---|---|
 | `tuned_rt` (baseline, n=4) | 12.59M | — | **70.50 ± 0.46** | 6 | 58.5 |
-| `cff_mlp_tied` | 13.64M | +8.3 % | 68.89 | 7 | *(killed at ep9)* |
-| `cff_block_tied` | 14.69M | +16.7 % | 70.00 | 6 | 57.9 |
-| `cff_mlp_untied` | 19.93M | +58.3 % | 69.71 | 5 | 38.7 |
-| `cff_block_untied` | 27.27M | +116.6 % | **71.93** | 6 | 34.0 |
+| `cff_mlp_tied` (n=1) | 13.64M | +8.3 % | 68.89 | 7 | *(killed at ep9)* |
+| `cff_block_tied` (n=1) | 14.69M | +16.7 % | 70.00 | 6 | 57.9 |
+| `cff_mlp_untied` (n=1) | 19.93M | +58.3 % | 69.71 | 5 | 38.7 |
+| `cff_block_untied` (n=3) | 27.27M | +116.6 % | 69.95 ± 2.57 | 6 | 31.7 |
 | `tuned_hrm` (reference) | 12.59M | — | 81.3 – 82.3 | 11–19 | 80.6 |
 
-`cff_block_untied` is the only from-scratch arm above the RT baseline: **+1.43 over the RT mean**,
-about 3x the RT's own seed spread — but it is **n=1**, so this is the headline number that needs
-replication. It also collapses hardest late (34 % vs the RT's 58 %), which is what +117 % parameters
-on 1000 puzzles predicts. Untying costs parameters but **not** FLOPs — `block_tied` and
-`block_untied` do the same arithmetic per pass.
+**No from-scratch arm beats the RT baseline.** `cff_block_untied` looked like the exception at n=1
+(71.93, +1.43) — replicated at 3 seeds it gives 71.63 / 71.23 / **66.99**, i.e. 69.95 ± 2.57, which
+is 0.55 *below* the RT mean. The original run was a lucky seed. What the extra parameters actually
+buy is variance: a 2.57 spread against the RT's own 0.46, from an arm whose seeds otherwise agree on
+peaking at epoch 6. Pooling all four runs of this arm gives 70.45 ± 2.32 — the same null.
 
-### Resumed from a trained RT (all start from the same 70.87 % checkpoint)
+The late collapse replicated on every seed (~30 % at ep20 vs the RT's 58 %), so it is a property of
+the arm, not of one run. That is what +117 % parameters on 1000 puzzles predicts. Untying costs
+parameters but **not** FLOPs — `block_tied` and `block_untied` do the same arithmetic per pass.
 
-Zero-gated, so each provably starts at exactly 70.87 %.
+The 1k conclusion for the from-scratch setting is therefore negative: on a generalisation gap,
+bolting a cycle FF layer onto a randomly-initialised RT does not close any of it.
 
-| arm | core | best | @ep | last | vs init |
-|---|---|---|---|---|---|
-| `rt_sft` — **no cycle FF** (control) | trained | 70.02 | 1 | 61.7 | −0.85 |
-| graft, `inject`, frozen core | frozen | 64.23 | 1 | 57.3 | −6.64 |
-| graft, `inline`, frozen core | frozen | 69.80 | 8 | 69.4 | −1.07 |
-| `cff_sft` — `inject`, core fine-tuned | trained | **72.31** | 4 | 58.7 | **+1.44** |
+### Resumed from a trained RT
 
-**This is the one setting where the cycle FF layer clearly earns its place.** `cff_sft` beats the
-matched no-cycle-FF control by **+2.29**, so the gain is not merely the second training budget.
+Zero-gated, so each arm provably starts at exactly its checkpoint's accuracy. **Two different
+checkpoints are in play** — the original runs used a 70.87 % `tuned_rt` (`nonchalant-malamute`,
+since deleted); the 3-seed replication used the surviving `malachite-saluki`, which evals to
+**69.77 %**. Rows are marked accordingly and `vs init` is against each row's own init, so the
+`vs init` column compares across rows but the raw `best` column does not.
+
+| arm | core | init | best | @ep | last | vs init |
+|---|---|---|---|---|---|---|
+| `rt_sft` — **no cycle FF** (control, n=3) | trained | 69.77 | 69.38 ± 0.10 | 1 | 63.5 | −0.39 |
+| `rt_sft` (original, n=1) | trained | 70.87 | 70.02 | 1 | 61.7 | −0.85 |
+| graft, `inject`, frozen core (n=1) | frozen | 70.87 | 64.23 | 1 | 57.3 | −6.64 |
+| graft, `inline`, frozen core (n=1) | frozen | 70.87 | 69.80 | 8 | 69.4 | −1.07 |
+| `cff_sft` — `inject`, core fine-tuned (n=3) | trained | 69.77 | **72.82 ± 0.50** | 3 | 66.0 | **+3.05** |
+| `cff_sft` (original, n=1) | trained | 70.87 | 72.31 | 4 | 58.7 | +1.44 |
+| `cff_sft_lr10` (n=1) | trained | 69.77 | 69.87 | 1 | 63.7 | +0.10 |
+| **`cff_sft_untied`** (n=3) | trained | 69.77 | **73.53 ± 0.31** | 2 | 66.3 | **+3.76** |
+
+**This is the one setting where the cycle FF layer clearly earns its place, and it replicates.**
+Against a matched control resumed from the same checkpoint for the same budget, `cff_sft` wins by
+**+3.44** (72.82 ± 0.50 vs 69.38 ± 0.10, n=3 each). The two arms do not overlap at any seed, and
+each is internally tight — an order of magnitude tighter than the from-scratch arm. The shapes
+differ as much as the peaks: every `cff_sft` seed climbs above its init and peaks at epoch 3, every
+`rt_sft` seed peaks at epoch 1 *below* its init and only decays. The second training budget on its
+own makes the model worse; the cycle FF layer is what converts it into a gain.
+
+`cff_sft_lr10` answers the "is it just undertrained?" question with a clear **no**: training the
+layer 10x faster than the core erases the entire gain (69.87, +0.10) and reproduces the no-layer
+control's shape exactly — peak at epoch 1, monotone decay. The layer only pays off when it
+co-adapts *with* the core at the same rate. This also rules out the reading that the graft works
+by adding fresh capacity, since capacity trained faster should have helped more, not less.
+
+**`cff_sft_untied` is the best configuration found: 73.53 ± 0.31 (73.61 / 73.19 / 73.80), i.e.
++4.15 over the matched control.** Untying beats tied `cff_sft` by +0.71, but that margin is *not*
+established at n=3 — the seed ranges still touch (untied's worst 73.19 vs tied's best 73.27) and a
+Welch t-test gives t≈2.1, p≈0.12. Treat it as suggestive, not proven, and note the price: 14.7M
+added parameters against tied's 2.1M, for a gain roughly the size of one seed's noise. It does
+consistently peak an epoch earlier (2 vs 3), so the per-cycle layers mostly buy faster adaptation.
+
+HRM ties its H level, and nothing here contradicts that choice.
+
 Freezing the core fails both ways: `inject` degrades from the first eval, `inline` sits flat near
-its init for 20 epochs without ever exceeding it. All n=1 — replication is the priority.
+its init for 20 epochs without ever exceeding it. Those two rows remain n=1.
 
 ## Setup on a new machine
 
@@ -117,8 +153,15 @@ epoch 20, so `last.pt` would start the graft 12 points lower. `best.pt` holds EM
 the best eval. Sanity-check whatever you point at:
 
 ```bash
-uv run python eval.py --ckpt "$RT_CKPT" --split test_hard   # expect ~0.709
+uv run python eval.py --ckpt "$RT_CKPT" --split test_hard   # expect 0.698-0.709
 ```
+
+**Which checkpoint you land on matters and is not fixed.** `tuned_rt` seeds peak anywhere in
+69.8-70.8, so a fresh one can start the graft a point either way. The 3-seed replication used
+`malachite-saluki` (**0.6977**, the weakest of the four RT seeds) because the 70.87 %
+`nonchalant-malamute` used by the original runs no longer exists. This does not affect the
+`cff_sft` vs `rt_sft` comparison — both resume from the same weights — but it does shift every
+absolute `best` and every `vs init`, so record the init alongside any new resume result.
 
 ## Running the experiments
 
@@ -139,23 +182,27 @@ pkill -f "config-name cff_block_untied"
 
 ### Priority order
 
-1. **`cff_block_untied`, 3 seeds** — replicate the only from-scratch arm above baseline (+1.43,
-   n=1). 20 epochs, ~55 min/seed.
-   ```bash
-   SESSION=cff NPROC=8 ./run_baselines.sh cff_block_untied
-   ```
-2. **`cff_sft` and `rt_sft`, 3 seeds each** — replicate the +2.29 and its matched control. This is
-   the strongest signal in the whole sweep. 8 epochs, ~22 min/seed.
-   ```bash
-   SESSION=sft NPROC=8 ./run_baselines.sh cff_sft rt_sft
-   ```
-3. **`cff_sft_lr10`** (`cff_lr_mult=10`) — is a randomly-initialised layer behind a zero gate simply
-   undertrained at a converged backbone's LR? **`cff_sft_untied`** — per-cycle layers in the setting
-   that works.
-4. Untried and worth a look: `cff_period > 1` (nothing here has real timescale *separation* — the
-   cycle FF layer fires every cycle, so the "slow" state is not slow); `cff_layers=2`; the graft on
-   full Sudoku-Extreme, where nothing overfits and the question becomes capability rather than
-   memorisation.
+Priorities 1–3 are **done** (2026-09-10): `cff_block_untied` failed to replicate, `cff_sft` and its
+control replicated at 3 seeds each, `cff_sft_lr10` ran at n=1, and `cff_sft_untied` — the best
+configuration found — ran at 3 seeds. The queue took 3h40m on 8 H100s, plus 45 min for the
+3-seed `cff_sft_untied` follow-up:
+
+```bash
+SESSION=cff NPROC=8 ./run_baselines.sh cff_block_untied cff_sft rt_sft cff_sft_lr10 cff_sft_untied
+```
+
+What is left, now that the graft is the only surviving positive result:
+
+1. **The graft on full Sudoku-Extreme.** Every 1k arm peaks by epoch 6 and then overfits, so the
+   whole sweep is measuring a generalisation gap on 1000 puzzles. On full data nothing overfits and
+   the question becomes capability rather than memorisation — the setting where a +3.44 graft would
+   actually matter.
+2. **`cff_period > 1`** — nothing here has real timescale *separation*: the cycle FF layer fires
+   every cycle, so the "slow" state is not slow. This is the structural difference from HRM that
+   the sweep has not yet tested. Also `cff_layers=2`.
+3. **An LR sweep between 1x and 10x** on the cycle FF layer. 10x destroys the gain and 1x gives
+   +3.05; nobody has looked in between, and the fact that the layer must move *with* the core is
+   the most mechanistically suggestive thing the sweep has produced.
 
 Any knob can be overridden without a new config:
 
@@ -203,3 +250,14 @@ Prints mean ± stdev of `best` across seeds plus every per-epoch curve. W&B proj
   so control and treatment differ in exactly one thing.
 - Old `graft_rt_*` checkpoints predate the rename to `cff_*` and no longer load; their curves live
   in W&B.
+- **A long-lived tmux server does not inherit your shell's env.** `run_baselines.sh` launches into
+  tmux, so if the server was started before you exported `RT_CKPT` (or before `uv` was on `PATH`),
+  the resume arms silently fall back to the default checkpoint path and die on `FileNotFoundError`.
+  Either `tmux kill-server` first, or launch the worker with the env set explicitly:
+  ```bash
+  tmux new-session -d -s cff -c "$PWD" \
+      "PATH=/path/to/uv:\$PATH RT_CKPT='checkpoints/tuned_rt <coolname>/seed_1/best.pt' \
+       SESSION=cff NPROC=8 bash run_baselines.sh --worker cff_sft rt_sft | tee logs/cff/runner.log"
+  ```
+  Confirm what a run actually loaded before trusting it:
+  `grep pretrained_ckpt "checkpoints/<arm> <coolname>/seed_1/model_config.json"`.
