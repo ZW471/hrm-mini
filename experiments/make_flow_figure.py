@@ -2,7 +2,7 @@
 import math
 import os
 
-W, H = 1440, 2080
+W, H = 1440, 2100
 SANS = "Inter, Helvetica Neue, Helvetica, Arial, sans-serif"
 MONO = "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
 
@@ -378,14 +378,14 @@ text(bx_, yD + 154, "74.54 ± 0.49", 20, INK, weight="700")
 text(bx_, yD + 171, "in-training · best = final, still climbing · 3.8M puzzles", 10.5, MUTED)
 
 text(bx_, yD + 198, "dfm_113m_unif_sc2_cfg_1k  (discrete)", 12, GRN, weight="700", mono=True)
-text(bx_, yD + 222, "86.5 ± 0.8", 20, INK, weight="700")
-text(bx_, yD + 239, "tuned sampler (128 steps, η 10, guidance 5) · 66.6 ± 2.5 in-training", 10.5, MUTED)
-text(bx_, yD + 254, "best at epoch 3, every seed · 97.7 ± 0.2 @8, 99.3 ± 0.3 @32 verified restarts", 10.5, MUTED)
+text(bx_, yD + 222, "84.5 ± 1.2", 20, INK, weight="700")
+text(bx_, yD + 239, "full test_hard (20k), tuned sampler (128 steps, η 10, guidance 5) · 86.5 ± 0.8 on the 512 selection subset", 10.5, MUTED)
+text(bx_, yD + 254, "best at epoch 3, every seed · 97.7 ± 0.2 @8, 99.3 ± 0.3 @32 verified restarts (512 subset)", 10.5, MUTED)
 
 text(bx_, yD + 281, "dfm_113m_unif_sc2_cfg_full  (discrete)", 12, GRN, weight="700", mono=True)
 text(bx_, yD + 305, "86.7 / 91.6 (η 10)", 20, INK, weight="700")
 text(bx_, yD + 322, "in-training at step 83,200, full schedule · n = 1 · sampler not yet tuned", 10.5, MUTED)
-text(bx_, yD + 337, "reference: tuned_hrm on 1k, 80.65 ± 2.40 (n=6) · the 13M discrete model is in the panel below", 10.5, MUTED)
+text(bx_, yD + 337, "reference: tuned_hrm on 1k, 80.65 ± 2.40 (n=6, full test_hard) · the 13M discrete model is in the panel below", 10.5, MUTED)
 
 # mini chart of the curves
 chx, chy, chw, chh = 470, yD + 44, 420, 220
@@ -443,7 +443,7 @@ rows = [
     ("sampler",   "cont: Heun SDE, g = σ(1−t), 2 NFE/step",        "disc: CTMC Euler, rate 1/(1−t) + η, 1 NFE/step"),
     ("givens",    "cont: re-noised and pinned each step",          "disc: never noised, never in the loss"),
     ("memory",    "cont: soft state carried in x_t itself",        "disc: only via self-conditioning on p_prev"),
-    ("on 1k",     "cont: 44 in-train · 50 tuned · 91 @32 restarts", "disc: 67 in-train · 86.5 tuned · 99.3 @32 restarts"),
+    ("on 1k",     "cont: 44 in-train · 50 tuned · 91 @32 restarts", "disc: 67 in-train · 84.5 tuned (20k) · 99.3 @32 restarts"),
 ]
 ty = yD + 74
 for k, a, b in rows:
@@ -458,7 +458,7 @@ rule(yD + 362)
 # Panel F: size sweep and the HRM-sized comparison
 # =============================================================================================
 yF = yD + 396
-text(32, yF, "Same size as HRM: the 13M discrete model still wins, at 2.3× the inference and 1/22 of the training compute", 17, INK, weight="700")
+text(32, yF, "Same size as HRM: the 13M discrete model ties HRM on the full test set, at 3.5× the inference wall clock and 1/22 of the training compute", 17, INK, weight="700")
 text(32, yF + 20, "run_dfm_sizes.sh · dfm_L<layers>d<hidden>_unif_sc2t[_lr3]_cfg_1k · outputs/dfm_sizes/README.md · 1k puzzles, batch 768, tuned sampler (128 steps, η 10, guidance 5)", 11.5, MUTED, mono=True)
 
 # --- scatter: params vs best in-training exact match, coloured by depth --------------------------
@@ -486,7 +486,7 @@ for pm in (2, 5, 10, 20, 50, 100):
     add(f'<line x1="{PX(pm)}" y1="{sy0+sh_}" x2="{PX(pm)}" y2="{sy0+sh_+4}" stroke="{MUTED}" stroke-width="1"/>')
     text(PX(pm), sy0 + sh_ + 15, f"{pm}M", 9.5, MUTED, "middle")
 text(sx0 + sw_ / 2, sy0 + sh_ + 30, "parameters (log scale) · each point is one shape at its best LR of {1e-4, 3e-4, 1e-3}", 9.5, MUTED, "middle")
-text(sx0 - 6, sy0 - 8, "best in-training test_hard exact match (%), tuned sampler, single seed (3-seed means for L16d192 / L16d256)", 9.5, MUTED, "start")
+text(sx0 - 6, sy0 - 8, "best in-training exact match (%), 512-puzzle subset, tuned sampler, 1 seed (3-seed means: L16d192, L16d256)", 9.5, MUTED, "start")
 # HRM reference: a point at 12.59M / 80.65 with its ± band
 add(f'<rect x="{sx0}" y="{PY(83.05)}" width="{sw_}" height="{PY(78.25)-PY(83.05)}" fill="{PURP_F}" opacity="0.6"/>')
 add(f'<line x1="{sx0}" y1="{PY(80.65)}" x2="{sx0+sw_}" y2="{PY(80.65)}" stroke="{PURP}" stroke-width="1.2" stroke-dasharray="6,4"/>')
@@ -513,16 +513,16 @@ text(PX(13.12) + 7, PY(81.3) + 14, "L16d256 13.1M", 9, GRN, "start", "700")
 text(PX(30), PY(93), "12–24 blocks: ~80 % from 10M to 52M", 9, GRN, "start", "700")
 # offline 3-seed numbers, in the empty lower-right of the plot
 lx, ly_ = PX(36), PY(50)
-text(lx, ly_, "offline single-shot, tuned sampler", 9.5, INK, "start", "700")
-text(lx, ly_ + 14, "113M   86.5 ± 0.8  n=3", 9.5, GRN, "start", mono=True)
-text(lx, ly_ + 27, "13.1M  84.1 ± 1.2  n=3", 9.5, GRN, "start", "700", mono=True)
-text(lx, ly_ + 40, "7.4M   82.5 ± 2.5  n=3", 9.5, GRN, "start", mono=True)
-text(lx, ly_ + 53, "3.3M   78.7        n=1", 9.5, GRN, "start", mono=True)
+text(lx, ly_, "full test_hard (20k), 1 sample", 9.5, INK, "start", "700")
+text(lx, ly_ + 14, "113M   84.5 ± 1.2  n=3", 9.5, GRN, "start", mono=True)
+text(lx, ly_ + 27, "13.1M  81.5 ± 0.5  n=3", 9.5, GRN, "start", "700", mono=True)
+text(lx, ly_ + 40, "7.4M   80.8 ± 1.1  n=3", 9.5, GRN, "start", mono=True)
+text(lx, ly_ + 53, "13.1M, 1D RoPE 77.5 ± 3.6", 9.5, GRN, "start", mono=True)
 text(lx, ly_ + 66, "HRM    80.65 ± 2.40 n=6", 9.5, PURP, "start", "700", mono=True)
 cap = sy0 + sh_ + 52
 text(32, cap, "Depth is what matters. L4d512 has HRM's 12.58M of transformer weights arranged", 10.5, INK)
 text(32, cap + 14, "as HRM arranges them (4 blocks, 512 wide) and gets 35 %; the same count as 16", 10.5, INK)
-text(32, cap + 28, "distinct 256-wide blocks gets 84 %. Width 256 → 768 is then worth 2–5 points.", 10.5, INK)
+text(32, cap + 28, "distinct 256-wide blocks gets 81.5 % (full split). Width 256 → 768 is then worth 3 points.", 10.5, INK)
 text(32, cap + 42, "Small models need lr 3e-4 (+5 to +20 over 1e-4); 32-block models do not train at 1e-4.", 10.5, INK)
 
 # --- comparison table: HRM vs the 13M DFM -------------------------------------------------------
@@ -533,10 +533,12 @@ text(tx1 + 190, hdr_y, "tuned_hrm", 10.5, PURP, "start", "700", mono=True)
 text(tx1 + 420, hdr_y, "dfm_L16d256_unif_sc2t_lr3 (n=3)", 10.5, GRN, "start", "700", mono=True)
 rows = [
     ("params",                 "12.59M · 4 blocks × 512, reused",           "13.12M · 16 blocks × 256, untied"),
-    ("test_hard, 1 sample",    "80.65 ± 2.40  (n=6)",                       "84.1 ± 1.2  (85.2 / 82.8 / 84.4)"),
-    ("+ 8 verified restarts",  "— (deterministic)",                         "98.0"),
+    ("test_hard 20k, 1 sample","80.65 ± 2.40  (n=6)",                       "81.5 ± 0.5  (81.8 / 81.7 / 81.0)"),
+    ("512 selection subset",   "—",                                         "84.1 ± 1.2  (selection bias ≈ 2.6)"),
+    ("+ 8 verified restarts",  "— (deterministic)",                         "98.0  (512 subset)"),
     ("block-forwards / solve", "16 segments × 28 = 448",                    "128 steps × 2 CFG × 16 = 4,096"),
     ("inference MACs / cell",  "1.41 G",                                    "3.22 G  (2.3×)"),
+    ("wall clock, 20k puzzles","15 s on one H100  (0.75 ms/puzzle)",        "52 s  (2.6 ms/puzzle; 3.5×)"),
     ("train MACs / cell / step","264 M  (28 fwd + BPTT)",                   "50 M  (1 graded + ½·2 no-grad fwd)"),
     ("steps to best",          "46–79k  (epoch 11–19)",                     "15k  (epoch 3.6)"),
     ("train FLOPs to best",    "2.1 × 10¹⁸",                                "9.4 × 10¹⁶  (22× less)"),
@@ -553,11 +555,11 @@ for k, a, b in rows:
     text(tx1 + 190, ty, a, 10, INK)
     text(tx1 + 420, ty, b, 10, INK)
     ty += 17
-text(tx1, ty + 12, "Why it wins: it is trained on its own intermediate states (a random-t corrupted board is handed to it, with", 10.5, INK)
+text(tx1, ty + 12, "Why it works: it is trained on its own intermediate states (a random-t corrupted board is handed to it, with", 10.5, INK)
 text(tx1, ty + 26, "per-cell targets) instead of having to invent a latent trajectory; the state is categorical, revised under", 10.5, INK)
 text(tx1, ty + 40, "cross-entropy, with a soft carry-over (self-conditioning: 24 → 86 at 113M); the parameters go into 16 distinct", 10.5, INK)
 text(tx1, ty + 54, "blocks rather than 4 reused ones; and failures are far-off legal-looking boards that verified restarts re-roll.", 10.5, INK)
-text(tx1, ty + 68, "What it costs: 2.3× inference per solve, a sampler to tune, and early stopping at epoch 3–4 (it overfits by 5–7).", 10.5, INK)
+text(tx1, ty + 68, "What it costs: 3.5× HRM's wall clock per puzzle, a sampler to tune, and early stopping at epoch 3–4 (it overfits by 5–7).", 10.5, INK)
 
 add('</svg>')
 open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "flow_matching_architecture.svg"), "w").write("\n".join(out))

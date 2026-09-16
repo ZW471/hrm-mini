@@ -1,4 +1,5 @@
 import argparse
+import time
 import yaml
 import os
 
@@ -15,6 +16,7 @@ def evaluate():
     parser = argparse.ArgumentParser(description="Evaluate a trained model.")
     parser.add_argument("--ckpt", type=str, required=True, help="Path to the saved checkpoint (.pt file)")
     parser.add_argument("--split", type=str, default="test", help="Dataset split to evaluate on")
+    parser.add_argument("--batch-size", type=int, default=None, help="Eval batch size (default: the training local batch)")
     args = parser.parse_args()
 
     # Load config
@@ -27,7 +29,7 @@ def evaluate():
     
     # Load evaluation dataset
     eval_loader, metadata = create_dataloader(
-        args.split, config.local_batch_size, rank=0, world_size=1, **config.data.__pydantic_extra__  # pyright: ignore[reportCallIssue]
+        args.split, args.batch_size or config.local_batch_size, rank=0, world_size=1, **config.data.__pydantic_extra__  # pyright: ignore[reportCallIssue]
     )
 
     # Initialize Model
@@ -50,6 +52,16 @@ def evaluate():
     samples = []
 
     print(f"Starting evaluation on '{args.split}' split...")
+    # Warm up (torch.compile, CUDA context) on the first batch so the wall clock is steady-state.
+    x0, _ = next(iter(eval_loader))
+    with torch.no_grad():
+        if is_autoregressive:
+            generate(model, x0.cuda())
+        else:
+            carry = model.initial_carry
+            for _ in range(config.cycles_per_data):
+                carry, _ = run_inference(model, carry, x0.cuda())
+    torch.cuda.synchronize(); t0 = time.perf_counter()
     for x, y in tqdm.tqdm(eval_loader):
         samples.append(x.numpy())
 
@@ -72,8 +84,10 @@ def evaluate():
              correctness=np.concat(correctness, axis=0),
              samples=np.concat(samples, axis=0))
 
+    torch.cuda.synchronize(); elapsed = time.perf_counter() - t0
     print(f"\n--- Results ---")
     print(f"Total Samples: {total_samples}")
+    print(f"Wall clock: {elapsed:.1f} s ({1000 * elapsed / total_samples:.2f} ms/puzzle, after a warm-up batch)")
     print(f"Exact Match Accuracy: {total_correct / total_samples:.4f}")
 
 if __name__ == "__main__":

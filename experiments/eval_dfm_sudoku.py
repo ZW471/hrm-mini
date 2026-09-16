@@ -11,6 +11,7 @@ import itertools
 import json
 import os
 import sys
+import time
 
 import numpy as np
 import torch
@@ -41,6 +42,7 @@ def main():
                    help="Write the puzzle back into the state at every step (default: the run's --givens mode)")
     p.add_argument("--batch", type=int, default=512)
     p.add_argument("--seed", type=int, default=7)
+    p.add_argument("--compile", action="store_true", help="torch.compile the model (as train.py / eval.py do)")
     args = p.parse_args()
 
     device = torch.device("cuda")
@@ -54,6 +56,8 @@ def main():
         self_cond=cfg.get("self_cond", False))).to(device)
     model.load_state_dict(torch.load(args.ckpt, map_location=device))
     model.eval()
+    if args.compile:
+        model = torch.compile(model, dynamic=False, fullgraph=True)
     prior = cfg["prior"]
 
     q, a = load_pairs(args.dataset_dir, args.split)
@@ -76,14 +80,19 @@ def main():
                                     self_cond=cfg.get("self_cond", False)))
         return torch.cat(outs)
 
+    if args.compile:   # warm up so the wall clock below is steady-state
+        solve(args.sample_steps[0], args.noise_scale[0], args.guidance[0], args.temperature[0], args.seed)
     best = (-1.0, None)
     for steps, eta, guidance, temp in itertools.product(args.sample_steps, args.noise_scale, args.guidance, args.temperature):
+        torch.cuda.synchronize(); t0 = time.perf_counter()
         pred = solve(steps, eta, guidance, temp, args.seed)
+        torch.cuda.synchronize(); elapsed = time.perf_counter() - t0
         em = (pred == truth).all(dim=-1).float().mean().item()
         cell = (pred == truth).float().mean().item()
         valid = board_metrics(pred.cpu().numpy())["valid_board_rate"]
         print(f"steps={steps:4d}  eta={eta:5g}  guidance={guidance:4g}  temp={temp:4g}  "
-              f"exact_match={em:.4f}  cell_accuracy={cell:.4f}  valid_board={valid:.4f}", flush=True)
+              f"exact_match={em:.4f}  cell_accuracy={cell:.4f}  valid_board={valid:.4f}  "
+              f"wall={elapsed:.1f}s ({1000 * elapsed / cond.shape[0]:.2f} ms/puzzle)", flush=True)
         if em > best[0]:
             best = (em, (steps, eta, guidance, temp))
 

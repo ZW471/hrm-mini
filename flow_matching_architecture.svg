@@ -1,4 +1,4 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="2080" viewBox="0 0 1440 2080" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="2100" viewBox="0 0 1440 2100" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif">
 <defs>
 <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#1f2430"/></marker>
 <marker id="arrB" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#3b6fd4"/></marker>
@@ -8,7 +8,7 @@
 <marker id="arrM" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#6b7280"/></marker>
 <marker id="arrGr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#2f8f5b"/></marker>
 </defs>
-<rect width="1440" height="2080" fill="#ffffff"/>
+<rect width="1440" height="2100" fill="#ffffff"/>
 <text x="32" y="40" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="22" fill="#1f2430" text-anchor="start" font-weight="700">Flow matching on Sudoku: the board is the state — continuous and discrete</text>
 <text x="32" y="64" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="12.5" fill="#6b7280" text-anchor="start" font-weight="normal">flow_113m_cfg_1k · flow_113m_cfg_full — one encoder transformer, read three ways: the velocity field, the regression target it is trained on, and the drift</text>
 <text x="32" y="80" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="12.5" fill="#6b7280" text-anchor="start" font-weight="normal">of the stochastic sampler that solves puzzles. No recurrent state, no solver, no autoregression: the 9×9 board itself is the state. Plus its discrete counterpart, dfm_113m_* / dfm_L16d256_* (13M).</text>
@@ -1524,13 +1524,13 @@
 <text x="32" y="1414" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="20" fill="#1f2430" text-anchor="start" font-weight="700">74.54 ± 0.49</text>
 <text x="32" y="1431" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10.5" fill="#6b7280" text-anchor="start" font-weight="normal">in-training · best = final, still climbing · 3.8M puzzles</text>
 <text x="32" y="1458" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="12" fill="#2f8f5b" text-anchor="start" font-weight="700">dfm_113m_unif_sc2_cfg_1k  (discrete)</text>
-<text x="32" y="1482" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="20" fill="#1f2430" text-anchor="start" font-weight="700">86.5 ± 0.8</text>
-<text x="32" y="1499" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10.5" fill="#6b7280" text-anchor="start" font-weight="normal">tuned sampler (128 steps, η 10, guidance 5) · 66.6 ± 2.5 in-training</text>
-<text x="32" y="1514" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10.5" fill="#6b7280" text-anchor="start" font-weight="normal">best at epoch 3, every seed · 97.7 ± 0.2 @8, 99.3 ± 0.3 @32 verified restarts</text>
+<text x="32" y="1482" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="20" fill="#1f2430" text-anchor="start" font-weight="700">84.5 ± 1.2</text>
+<text x="32" y="1499" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10.5" fill="#6b7280" text-anchor="start" font-weight="normal">full test_hard (20k), tuned sampler (128 steps, η 10, guidance 5) · 86.5 ± 0.8 on the 512 selection subset</text>
+<text x="32" y="1514" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10.5" fill="#6b7280" text-anchor="start" font-weight="normal">best at epoch 3, every seed · 97.7 ± 0.2 @8, 99.3 ± 0.3 @32 verified restarts (512 subset)</text>
 <text x="32" y="1541" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="12" fill="#2f8f5b" text-anchor="start" font-weight="700">dfm_113m_unif_sc2_cfg_full  (discrete)</text>
 <text x="32" y="1565" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="20" fill="#1f2430" text-anchor="start" font-weight="700">86.7 / 91.6 (η 10)</text>
 <text x="32" y="1582" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10.5" fill="#6b7280" text-anchor="start" font-weight="normal">in-training at step 83,200, full schedule · n = 1 · sampler not yet tuned</text>
-<text x="32" y="1597" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10.5" fill="#6b7280" text-anchor="start" font-weight="normal">reference: tuned_hrm on 1k, 80.65 ± 2.40 (n=6) · the 13M discrete model is in the panel below</text>
+<text x="32" y="1597" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10.5" fill="#6b7280" text-anchor="start" font-weight="normal">reference: tuned_hrm on 1k, 80.65 ± 2.40 (n=6, full test_hard) · the 13M discrete model is in the panel below</text>
 <line x1="470" y1="1304" x2="470" y2="1524" stroke="#c7ccd6" stroke-width="1"/>
 <line x1="470" y1="1524" x2="890" y2="1524" stroke="#c7ccd6" stroke-width="1"/>
 <line x1="470" y1="1469.0" x2="890" y2="1469.0" stroke="#c7ccd6" stroke-width="0.6" stroke-dasharray="2,3"/>
@@ -1590,9 +1590,9 @@
 <text x="1000" y="1527" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10.5" fill="#2f8f5b" text-anchor="start" font-weight="normal">disc: only via self-conditioning on p_prev</text>
 <text x="940" y="1544" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10.5" fill="#6b7280" text-anchor="start" font-weight="700">on 1k</text>
 <text x="1000" y="1544" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10.5" fill="#3b6fd4" text-anchor="start" font-weight="normal">cont: 44 in-train · 50 tuned · 91 @32 restarts</text>
-<text x="1000" y="1557" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10.5" fill="#2f8f5b" text-anchor="start" font-weight="normal">disc: 67 in-train · 86.5 tuned · 99.3 @32 restarts</text>
+<text x="1000" y="1557" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10.5" fill="#2f8f5b" text-anchor="start" font-weight="normal">disc: 67 in-train · 84.5 tuned (20k) · 99.3 @32 restarts</text>
 <line x1="32" y1="1622" x2="1408" y2="1622" stroke="#c7ccd6" stroke-width="1"/>
-<text x="32" y="1656" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="17" fill="#1f2430" text-anchor="start" font-weight="700">Same size as HRM: the 13M discrete model still wins, at 2.3× the inference and 1/22 of the training compute</text>
+<text x="32" y="1656" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="17" fill="#1f2430" text-anchor="start" font-weight="700">Same size as HRM: the 13M discrete model ties HRM on the full test set, at 3.5× the inference wall clock and 1/22 of the training compute</text>
 <text x="32" y="1676" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="11.5" fill="#6b7280" text-anchor="start" font-weight="normal">run_dfm_sizes.sh · dfm_L&lt;layers&gt;d&lt;hidden&gt;_unif_sc2t[_lr3]_cfg_1k · outputs/dfm_sizes/README.md · 1k puzzles, batch 768, tuned sampler (128 steps, η 10, guidance 5)</text>
 <line x1="60" y1="1708" x2="60" y2="1958" stroke="#c7ccd6" stroke-width="1"/>
 <line x1="60" y1="1958" x2="530" y2="1958" stroke="#c7ccd6" stroke-width="1"/>
@@ -1617,7 +1617,7 @@
 <line x1="488.6185541219149" y1="1958" x2="488.6185541219149" y2="1962" stroke="#6b7280" stroke-width="1"/>
 <text x="488.6185541219149" y="1973" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="9.5" fill="#6b7280" text-anchor="middle" font-weight="normal">100M</text>
 <text x="295.0" y="1988" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="9.5" fill="#6b7280" text-anchor="middle" font-weight="normal">parameters (log scale) · each point is one shape at its best LR of {1e-4, 3e-4, 1e-3}</text>
-<text x="54" y="1700" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="9.5" fill="#6b7280" text-anchor="start" font-weight="normal">best in-training test_hard exact match (%), tuned sampler, single seed (3-seed means for L16d192 / L16d256)</text>
+<text x="54" y="1700" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="9.5" fill="#6b7280" text-anchor="start" font-weight="normal">best in-training exact match (%), 512-puzzle subset, tuned sampler, 1 seed (3-seed means: L16d192, L16d256)</text>
 <rect x="60" y="1750.375" width="470" height="12.0" fill="#ebe3f8" opacity="0.6"/>
 <line x1="60" y1="1756.375" x2="530" y2="1756.375" stroke="#7a5cc7" stroke-width="1.2" stroke-dasharray="6,4"/>
 <rect x="272.1246006972626" y="1751.375" width="10" height="10" fill="#7a5cc7" transform="rotate(45 277.1246006972626 1756.375)"/>
@@ -1656,15 +1656,15 @@
 <text x="215.6117991503297" y="1746.75" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="9" fill="#2f8f5b" text-anchor="end" font-weight="700">L16d192 7.4M</text>
 <text x="288.3330053562307" y="1768.75" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="9" fill="#2f8f5b" text-anchor="start" font-weight="700">L16d256 13.1M</text>
 <text x="365.7420489810356" y="1725.5" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="9" fill="#2f8f5b" text-anchor="start" font-weight="700">12–24 blocks: ~80 % from 10M to 52M</text>
-<text x="384.3496418022274" y="1833.0" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="9.5" fill="#1f2430" text-anchor="start" font-weight="700">offline single-shot, tuned sampler</text>
-<text x="384.3496418022274" y="1847.0" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9.5" fill="#2f8f5b" text-anchor="start" font-weight="normal">113M   86.5 ± 0.8  n=3</text>
-<text x="384.3496418022274" y="1860.0" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9.5" fill="#2f8f5b" text-anchor="start" font-weight="700">13.1M  84.1 ± 1.2  n=3</text>
-<text x="384.3496418022274" y="1873.0" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9.5" fill="#2f8f5b" text-anchor="start" font-weight="normal">7.4M   82.5 ± 2.5  n=3</text>
-<text x="384.3496418022274" y="1886.0" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9.5" fill="#2f8f5b" text-anchor="start" font-weight="normal">3.3M   78.7        n=1</text>
+<text x="384.3496418022274" y="1833.0" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="9.5" fill="#1f2430" text-anchor="start" font-weight="700">full test_hard (20k), 1 sample</text>
+<text x="384.3496418022274" y="1847.0" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9.5" fill="#2f8f5b" text-anchor="start" font-weight="normal">113M   84.5 ± 1.2  n=3</text>
+<text x="384.3496418022274" y="1860.0" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9.5" fill="#2f8f5b" text-anchor="start" font-weight="700">13.1M  81.5 ± 0.5  n=3</text>
+<text x="384.3496418022274" y="1873.0" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9.5" fill="#2f8f5b" text-anchor="start" font-weight="normal">7.4M   80.8 ± 1.1  n=3</text>
+<text x="384.3496418022274" y="1886.0" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9.5" fill="#2f8f5b" text-anchor="start" font-weight="normal">13.1M, 1D RoPE 77.5 ± 3.6</text>
 <text x="384.3496418022274" y="1899.0" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="9.5" fill="#7a5cc7" text-anchor="start" font-weight="700">HRM    80.65 ± 2.40 n=6</text>
 <text x="32" y="2010" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1f2430" text-anchor="start" font-weight="normal">Depth is what matters. L4d512 has HRM's 12.58M of transformer weights arranged</text>
 <text x="32" y="2024" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1f2430" text-anchor="start" font-weight="normal">as HRM arranges them (4 blocks, 512 wide) and gets 35 %; the same count as 16</text>
-<text x="32" y="2038" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1f2430" text-anchor="start" font-weight="normal">distinct 256-wide blocks gets 84 %. Width 256 → 768 is then worth 2–5 points.</text>
+<text x="32" y="2038" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1f2430" text-anchor="start" font-weight="normal">distinct 256-wide blocks gets 81.5 % (full split). Width 256 → 768 is then worth 3 points.</text>
 <text x="32" y="2052" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1f2430" text-anchor="start" font-weight="normal">Small models need lr 3e-4 (+5 to +20 over 1e-4); 32-block models do not train at 1e-4.</text>
 <text x="600" y="1708" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="13" fill="#1f2430" text-anchor="start" font-weight="700">HRM vs the HRM-sized discrete flow model</text>
 <text x="790" y="1728" font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace" font-size="10.5" fill="#7a5cc7" text-anchor="start" font-weight="700">tuned_hrm</text>
@@ -1672,48 +1672,54 @@
 <text x="600" y="1748" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#6b7280" text-anchor="start" font-weight="700">params</text>
 <text x="790" y="1748" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#1f2430" text-anchor="start" font-weight="normal">12.59M · 4 blocks × 512, reused</text>
 <text x="1020" y="1748" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#1f2430" text-anchor="start" font-weight="normal">13.12M · 16 blocks × 256, untied</text>
-<text x="600" y="1765" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#6b7280" text-anchor="start" font-weight="700">test_hard, 1 sample</text>
+<text x="600" y="1765" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#6b7280" text-anchor="start" font-weight="700">test_hard 20k, 1 sample</text>
 <text x="790" y="1765" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#1f2430" text-anchor="start" font-weight="normal">80.65 ± 2.40  (n=6)</text>
-<text x="1020" y="1765" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#1f2430" text-anchor="start" font-weight="normal">84.1 ± 1.2  (85.2 / 82.8 / 84.4)</text>
-<text x="600" y="1782" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#6b7280" text-anchor="start" font-weight="700">+ 8 verified restarts</text>
-<text x="790" y="1782" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#1f2430" text-anchor="start" font-weight="normal">— (deterministic)</text>
-<text x="1020" y="1782" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#1f2430" text-anchor="start" font-weight="normal">98.0</text>
-<text x="600" y="1799" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#6b7280" text-anchor="start" font-weight="700">block-forwards / solve</text>
-<text x="790" y="1799" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#1f2430" text-anchor="start" font-weight="normal">16 segments × 28 = 448</text>
-<text x="1020" y="1799" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#1f2430" text-anchor="start" font-weight="normal">128 steps × 2 CFG × 16 = 4,096</text>
-<text x="600" y="1816" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#6b7280" text-anchor="start" font-weight="700">inference MACs / cell</text>
-<text x="790" y="1816" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#1f2430" text-anchor="start" font-weight="normal">1.41 G</text>
-<text x="1020" y="1816" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#1f2430" text-anchor="start" font-weight="normal">3.22 G  (2.3×)</text>
-<text x="600" y="1833" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#6b7280" text-anchor="start" font-weight="700">train MACs / cell / step</text>
-<text x="790" y="1833" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#1f2430" text-anchor="start" font-weight="normal">264 M  (28 fwd + BPTT)</text>
-<text x="1020" y="1833" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#1f2430" text-anchor="start" font-weight="normal">50 M  (1 graded + ½·2 no-grad fwd)</text>
-<text x="600" y="1850" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#6b7280" text-anchor="start" font-weight="700">steps to best</text>
-<text x="790" y="1850" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#1f2430" text-anchor="start" font-weight="normal">46–79k  (epoch 11–19)</text>
-<text x="1020" y="1850" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#1f2430" text-anchor="start" font-weight="normal">15k  (epoch 3.6)</text>
-<text x="600" y="1867" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#6b7280" text-anchor="start" font-weight="700">train FLOPs to best</text>
-<text x="790" y="1867" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#1f2430" text-anchor="start" font-weight="normal">2.1 × 10¹⁸</text>
-<text x="1020" y="1867" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#1f2430" text-anchor="start" font-weight="normal">9.4 × 10¹⁶  (22× less)</text>
-<text x="600" y="1884" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#6b7280" text-anchor="start" font-weight="700">wall clock to best</text>
-<text x="790" y="1884" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#1f2430" text-anchor="start" font-weight="normal">≈ 2.9 GPU-h  (28 min × 8 H100 for 83k)</text>
-<text x="1020" y="1884" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#1f2430" text-anchor="start" font-weight="normal">10 min on one H100  (0.17 GPU-h)</text>
-<text x="600" y="1901" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#6b7280" text-anchor="start" font-weight="700">what iterates</text>
-<text x="790" y="1901" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#1f2430" text-anchor="start" font-weight="normal">latents z_L, z_H inside the net</text>
-<text x="1020" y="1901" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#1f2430" text-anchor="start" font-weight="normal">the board, in the sampler</text>
-<text x="600" y="1918" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#6b7280" text-anchor="start" font-weight="700">intermediate states</text>
-<text x="790" y="1918" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#1f2430" text-anchor="start" font-weight="normal">learned; no gradient across the carry</text>
-<text x="1020" y="1918" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#1f2430" text-anchor="start" font-weight="normal">sampled from the forward process (teacher-forced)</text>
-<text x="600" y="1935" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#6b7280" text-anchor="start" font-weight="700">revision / stochastic</text>
-<text x="790" y="1935" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#1f2430" text-anchor="start" font-weight="normal">latent only / no</text>
-<text x="1020" y="1935" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#1f2430" text-anchor="start" font-weight="normal">any cell can jump; η re-noise; restarts / yes</text>
-<text x="600" y="1952" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#6b7280" text-anchor="start" font-weight="700">Sudoku prior</text>
-<text x="790" y="1952" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#1f2430" text-anchor="start" font-weight="normal">none</text>
-<text x="1020" y="1952" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#1f2430" text-anchor="start" font-weight="normal">none (2D RoPE row/col; no box)</text>
-<text x="600" y="1969" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#6b7280" text-anchor="start" font-weight="700">test-time knobs</text>
-<text x="790" y="1969" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#1f2430" text-anchor="start" font-weight="normal">none</text>
-<text x="1020" y="1969" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#1f2430" text-anchor="start" font-weight="normal">steps, η, guidance (selected on the same 512)</text>
-<text x="600" y="1998" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1f2430" text-anchor="start" font-weight="normal">Why it wins: it is trained on its own intermediate states (a random-t corrupted board is handed to it, with</text>
-<text x="600" y="2012" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1f2430" text-anchor="start" font-weight="normal">per-cell targets) instead of having to invent a latent trajectory; the state is categorical, revised under</text>
-<text x="600" y="2026" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1f2430" text-anchor="start" font-weight="normal">cross-entropy, with a soft carry-over (self-conditioning: 24 → 86 at 113M); the parameters go into 16 distinct</text>
-<text x="600" y="2040" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1f2430" text-anchor="start" font-weight="normal">blocks rather than 4 reused ones; and failures are far-off legal-looking boards that verified restarts re-roll.</text>
-<text x="600" y="2054" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1f2430" text-anchor="start" font-weight="normal">What it costs: 2.3× inference per solve, a sampler to tune, and early stopping at epoch 3–4 (it overfits by 5–7).</text>
+<text x="1020" y="1765" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#1f2430" text-anchor="start" font-weight="normal">81.5 ± 0.5  (81.8 / 81.7 / 81.0)</text>
+<text x="600" y="1782" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#6b7280" text-anchor="start" font-weight="700">512 selection subset</text>
+<text x="790" y="1782" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#1f2430" text-anchor="start" font-weight="normal">—</text>
+<text x="1020" y="1782" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#1f2430" text-anchor="start" font-weight="normal">84.1 ± 1.2  (selection bias ≈ 2.6)</text>
+<text x="600" y="1799" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#6b7280" text-anchor="start" font-weight="700">+ 8 verified restarts</text>
+<text x="790" y="1799" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#1f2430" text-anchor="start" font-weight="normal">— (deterministic)</text>
+<text x="1020" y="1799" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#1f2430" text-anchor="start" font-weight="normal">98.0  (512 subset)</text>
+<text x="600" y="1816" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#6b7280" text-anchor="start" font-weight="700">block-forwards / solve</text>
+<text x="790" y="1816" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#1f2430" text-anchor="start" font-weight="normal">16 segments × 28 = 448</text>
+<text x="1020" y="1816" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#1f2430" text-anchor="start" font-weight="normal">128 steps × 2 CFG × 16 = 4,096</text>
+<text x="600" y="1833" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#6b7280" text-anchor="start" font-weight="700">inference MACs / cell</text>
+<text x="790" y="1833" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#1f2430" text-anchor="start" font-weight="normal">1.41 G</text>
+<text x="1020" y="1833" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#1f2430" text-anchor="start" font-weight="normal">3.22 G  (2.3×)</text>
+<text x="600" y="1850" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#6b7280" text-anchor="start" font-weight="700">wall clock, 20k puzzles</text>
+<text x="790" y="1850" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#1f2430" text-anchor="start" font-weight="normal">15 s on one H100  (0.75 ms/puzzle)</text>
+<text x="1020" y="1850" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#1f2430" text-anchor="start" font-weight="normal">52 s  (2.6 ms/puzzle; 3.5×)</text>
+<text x="600" y="1867" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#6b7280" text-anchor="start" font-weight="700">train MACs / cell / step</text>
+<text x="790" y="1867" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#1f2430" text-anchor="start" font-weight="normal">264 M  (28 fwd + BPTT)</text>
+<text x="1020" y="1867" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#1f2430" text-anchor="start" font-weight="normal">50 M  (1 graded + ½·2 no-grad fwd)</text>
+<text x="600" y="1884" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#6b7280" text-anchor="start" font-weight="700">steps to best</text>
+<text x="790" y="1884" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#1f2430" text-anchor="start" font-weight="normal">46–79k  (epoch 11–19)</text>
+<text x="1020" y="1884" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#1f2430" text-anchor="start" font-weight="normal">15k  (epoch 3.6)</text>
+<text x="600" y="1901" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#6b7280" text-anchor="start" font-weight="700">train FLOPs to best</text>
+<text x="790" y="1901" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#1f2430" text-anchor="start" font-weight="normal">2.1 × 10¹⁸</text>
+<text x="1020" y="1901" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#1f2430" text-anchor="start" font-weight="normal">9.4 × 10¹⁶  (22× less)</text>
+<text x="600" y="1918" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#6b7280" text-anchor="start" font-weight="700">wall clock to best</text>
+<text x="790" y="1918" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#1f2430" text-anchor="start" font-weight="normal">≈ 2.9 GPU-h  (28 min × 8 H100 for 83k)</text>
+<text x="1020" y="1918" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#1f2430" text-anchor="start" font-weight="normal">10 min on one H100  (0.17 GPU-h)</text>
+<text x="600" y="1935" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#6b7280" text-anchor="start" font-weight="700">what iterates</text>
+<text x="790" y="1935" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#1f2430" text-anchor="start" font-weight="normal">latents z_L, z_H inside the net</text>
+<text x="1020" y="1935" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#1f2430" text-anchor="start" font-weight="normal">the board, in the sampler</text>
+<text x="600" y="1952" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#6b7280" text-anchor="start" font-weight="700">intermediate states</text>
+<text x="790" y="1952" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#1f2430" text-anchor="start" font-weight="normal">learned; no gradient across the carry</text>
+<text x="1020" y="1952" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#1f2430" text-anchor="start" font-weight="normal">sampled from the forward process (teacher-forced)</text>
+<text x="600" y="1969" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#6b7280" text-anchor="start" font-weight="700">revision / stochastic</text>
+<text x="790" y="1969" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#1f2430" text-anchor="start" font-weight="normal">latent only / no</text>
+<text x="1020" y="1969" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#1f2430" text-anchor="start" font-weight="normal">any cell can jump; η re-noise; restarts / yes</text>
+<text x="600" y="1986" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#6b7280" text-anchor="start" font-weight="700">Sudoku prior</text>
+<text x="790" y="1986" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#1f2430" text-anchor="start" font-weight="normal">none</text>
+<text x="1020" y="1986" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#1f2430" text-anchor="start" font-weight="normal">none (2D RoPE row/col; no box)</text>
+<text x="600" y="2003" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#6b7280" text-anchor="start" font-weight="700">test-time knobs</text>
+<text x="790" y="2003" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#1f2430" text-anchor="start" font-weight="normal">none</text>
+<text x="1020" y="2003" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10" fill="#1f2430" text-anchor="start" font-weight="normal">steps, η, guidance (selected on the same 512)</text>
+<text x="600" y="2032" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1f2430" text-anchor="start" font-weight="normal">Why it works: it is trained on its own intermediate states (a random-t corrupted board is handed to it, with</text>
+<text x="600" y="2046" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1f2430" text-anchor="start" font-weight="normal">per-cell targets) instead of having to invent a latent trajectory; the state is categorical, revised under</text>
+<text x="600" y="2060" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1f2430" text-anchor="start" font-weight="normal">cross-entropy, with a soft carry-over (self-conditioning: 24 → 86 at 113M); the parameters go into 16 distinct</text>
+<text x="600" y="2074" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1f2430" text-anchor="start" font-weight="normal">blocks rather than 4 reused ones; and failures are far-off legal-looking boards that verified restarts re-roll.</text>
+<text x="600" y="2088" font-family="Inter, Helvetica Neue, Helvetica, Arial, sans-serif" font-size="10.5" fill="#1f2430" text-anchor="start" font-weight="normal">What it costs: 3.5× HRM's wall clock per puzzle, a sampler to tune, and early stopping at epoch 3–4 (it overfits by 5–7).</text>
 </svg>
