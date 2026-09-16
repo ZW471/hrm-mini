@@ -1,0 +1,16 @@
+# config/cff_sft with real timescale separation: the cycle FF layer fires once per pass, before
+# the first of the seven core cycles, so the slow state changes once for every seven fast updates.
+# This is the closest analogue of HRM's schedule (one H step per L_cycles=6 L steps). Every other
+# cff arm so far used cff_period: 1, where the "slow" state is updated as often as the fast one.
+#
+# cff_phase: pre is required here -- with the default "post" placement the only application would
+# land after the last cycle, reach only the carry, and receive no gradient.
+defaults:
+  - /cff_sft@_here_
+  - _self_
+
+run_name: cff_sft_p7
+
+arch:
+  cff_period: 7
+  cff_phase: pre

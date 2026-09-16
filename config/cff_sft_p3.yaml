@@ -1,0 +1,11 @@
+# config/cff_sft with the cycle FF layer firing every third core cycle (before cycles 1, 4 and 7):
+# three slow updates per pass, between cff_sft_p7's one and cff_sft_pre's seven.
+defaults:
+  - /cff_sft@_here_
+  - _self_
+
+run_name: cff_sft_p3
+
+arch:
+  cff_period: 3
+  cff_phase: pre

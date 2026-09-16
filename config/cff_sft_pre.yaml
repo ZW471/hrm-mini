@@ -1,0 +1,13 @@
+# config/cff_sft with cff_phase: pre but the period still 1 -- the control for the cff_sft_p*
+# timescale sweep. Those arms need the "pre" placement, so this isolates what the placement alone
+# does (the layer now opens each cycle instead of closing it, and the first application of a pass
+# reads the previous pass's carried z) from what the period does.
+defaults:
+  - /cff_sft@_here_
+  - _self_
+
+run_name: cff_sft_pre
+
+arch:
+  cff_period: 1
+  cff_phase: pre

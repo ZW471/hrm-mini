@@ -28,6 +28,14 @@ class CycleFFConfig(TransformerConfig):
     cff_tied: bool = True
     # Run a cycle FF layer every `cff_period` core cycles -- HRM's L_cycles per H cycle.
     cff_period: int = 1
+    # Where in a group of `cff_period` cycles the slow update happens.
+    # "post": after the group's last core cycle (z_H = cff(z_H + z), then the next group reads it).
+    #         The application after the *final* cycle of a pass only reaches the carry, not the
+    #         logits, so with cff_period == cycles the layer gets no gradient at all.
+    # "pre":  before the group's first core cycle, including cycle 0 of every pass (which reads
+    #         the previous pass's carried z). Every application feeds the pass's readout, so any
+    #         period trains. Use this for cff_period > 1.
+    cff_phase: str = "post"
     # "inject": the layer owns a slow state z_H fed back into the core's input (HRM-like).
     # "inline": the layer writes straight into the core's fast state, carrying nothing across cycles.
     cff_mode: str = "inject"
@@ -72,6 +80,15 @@ class RecurrentTransformerCFF(nn.Module):
             if i % cff_period == 0:
                 z_H = cff_i(z_H + z)                 # cff_gated: z_H + g * cff_i(z_H + z)
 
+    That is `cff_phase="post"`. With `cff_phase="pre"` the slow update instead opens each group of
+    `cff_period` cycles (cycle 0 of a pass included, using the carried z), so that with
+    cff_period == cycles the pass is exactly one HRM H-step followed by `cycles` L-steps:
+
+        for i in 0..cycles-1:
+            if i % cff_period == 0:
+                z_H = cff_i(z_H + z)
+            z   = core(z + z_H + x)
+
     `cff_tied` chooses whether every cycle reuses one layer (as HRM ties its H level) or each cycle
     gets its own. `cff_type` chooses a plain feed-forward block or a full transformer block.
 
@@ -92,7 +109,9 @@ class RecurrentTransformerCFF(nn.Module):
         self.cycles = config.cycles
         self.bptt = config.bptt
         self.cff_period = config.cff_period
+        self.cff_phase = config.cff_phase
         self.cff_mode = config.cff_mode
+        assert self.cff_phase in ("pre", "post")
         self.cff_gated = config.cff_gated
         self.cff_lr_mult = config.cff_lr_mult
         assert self.cff_mode in ("inject", "inline")
@@ -110,7 +129,11 @@ class RecurrentTransformerCFF(nn.Module):
         # Cycle FF layers: one, or one per cycle that runs one.
         self.has_cff = config.cff_layers > 0
         if self.has_cff:
-            num_cff = 1 if config.cff_tied else self.cycles // self.cff_period
+            num_cff = 1 if config.cff_tied else len(self._cff_cycles())
+            # Without BPTT only the last cycle has gradient, so an application must land there.
+            assert config.bptt or (self.cycles - 1) in self._cff_cycles(), \
+                f"no cycle FF application under the 1-step grad: cycles={self.cycles} " \
+                f"cff_period={self.cff_period} cff_phase={self.cff_phase}"
             def build():
                 if config.cff_type == "block":
                     return Transformer(config.model_copy(update={
@@ -156,6 +179,12 @@ class RecurrentTransformerCFF(nn.Module):
         ]
         return [g for g in groups if g["params"]]
 
+    def _cff_cycles(self) -> list[int]:
+        """Core cycles (0-indexed) that a cycle FF application is attached to."""
+        if self.cff_phase == "pre":
+            return [i for i in range(self.cycles) if i % self.cff_period == 0]
+        return [i for i in range(self.cycles) if (i + 1) % self.cff_period == 0]
+
     def _apply_cff(self, idx: int, z: Tensor, z_H: Tensor) -> tuple[Tensor, Tensor]:
         cff = self.cff[idx % len(self.cff)]
         if self.cff_mode == "inject":
@@ -168,20 +197,28 @@ class RecurrentTransformerCFF(nn.Module):
 
     def forward(self, carry: Carry, input_ids: Tensor) -> tuple[Carry, Tensor]:
         x = self.embed(input_ids)
+        # On the first pass z is the single z_init vector; a "pre" application sees it before the
+        # core would have broadcast it, so give it the batch shape here.
+        z = carry["z"].expand_as(x)
         z_H = carry.get("z_H", 0.0)
+
+        def cycle(i: int, z: Tensor, z_H: Tensor) -> tuple[Tensor, Tensor]:
+            if not self.has_cff:
+                return self.core(z + x), z_H
+            if self.cff_phase == "pre" and i % self.cff_period == 0:
+                z, z_H = self._apply_cff(i // self.cff_period, z, z_H)
+            z = self.core(z + z_H + x)
+            if self.cff_phase == "post" and (i + 1) % self.cff_period == 0:
+                z, z_H = self._apply_cff((i + 1) // self.cff_period - 1, z, z_H)
+            return z, z_H
 
         # Forward iterations
         with torch.set_grad_enabled(torch.is_grad_enabled() and self.bptt):
-            z = carry["z"]
             for _i in range(self.cycles - 1):
-                z = self.core(z + z_H + x) if self.has_cff else self.core(z + x)
-                if self.has_cff and (_i + 1) % self.cff_period == 0:
-                    z, z_H = self._apply_cff((_i + 1) // self.cff_period - 1, z, z_H)
+                z, z_H = cycle(_i, z, z_H)
 
         # 1-step grad
-        z = self.core(z + z_H + x) if self.has_cff else self.core(z + x)
-        if self.has_cff and self.cycles % self.cff_period == 0:
-            z, z_H = self._apply_cff(self.cycles // self.cff_period - 1, z, z_H)
+        z, z_H = cycle(self.cycles - 1, z, z_H)
 
         # Ensure no gradient moves across carry
         new_carry: Carry = dict(z=z.detach())

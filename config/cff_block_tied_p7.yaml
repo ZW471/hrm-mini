@@ -1,0 +1,13 @@
+# config/cff_block_tied (from scratch, tied full-block cycle FF layer) with HRM-like timescale
+# separation: one slow update per pass, before the first core cycle. At cff_period: 1 this arm
+# was a null (70.00 vs the RT's 70.50); this asks whether the missing ingredient was the
+# separation of timescales rather than the second block itself.
+defaults:
+  - /cff_block_tied@_here_
+  - _self_
+
+run_name: cff_block_tied_p7
+
+arch:
+  cff_period: 7
+  cff_phase: pre

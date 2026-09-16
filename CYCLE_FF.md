@@ -44,6 +44,7 @@ recurrent steps (detached, like the RT's `z`).
 | `cff_intermediate_size` | FF width of the cycle FF layer (default: the core's) |
 | `cff_tied` | `True` = one layer shared across all cycles (HRM ties its H level). `False` = one layer per cycle |
 | `cff_period` | run a cycle FF layer every N core cycles (HRM's `L_cycles` per H cycle) |
+| `cff_phase` | `post` (default, the pseudo-code above) = the slow update closes a group of N cycles. `pre` = it opens the group, cycle 0 of every pass included (reading the previous pass's carried `z`). **Required for `cff_period > 1`**: under `post` the application after the final cycle only reaches the carry, not the logits, so at `cff_period = cycles` the layer gets no gradient at all (verified: grad is exactly 0). `pre` + `cff_period: 7` is one H-step followed by seven L-steps, HRM's schedule |
 | `cff_mode` | `inject` = maintain the slow state `z_H`. `inline` = write straight into the fast state `z`, carrying nothing across cycles |
 | `cff_gated` | wrap in a zero-init per-channel gate. Makes a run resuming from a pretrained core an **exact no-op at init** — verified `max\|logit diff\| = 0`. Pointless from scratch |
 | `cff_lr_mult` | LR multiplier for the cycle FF parameters vs the rest of the model |
@@ -108,8 +109,8 @@ control's shape exactly — peak at epoch 1, monotone decay. The layer only pays
 co-adapts *with* the core at the same rate. This also rules out the reading that the graft works
 by adding fresh capacity, since capacity trained faster should have helped more, not less.
 
-**`cff_sft_untied` is the best configuration found: 73.53 ± 0.31 (73.61 / 73.19 / 73.80), i.e.
-+4.15 over the matched control.** Untying beats tied `cff_sft` by +0.71, but that margin is *not*
+**`cff_sft_untied` was the best period-1 configuration: 73.53 ± 0.31 (73.61 / 73.19 / 73.80), i.e.
++4.15 over the matched control** (it has since been overtaken by `cff_sft_p7`, below). Untying beats tied `cff_sft` by +0.71, but that margin is *not*
 established at n=3 — the seed ranges still touch (untied's worst 73.19 vs tied's best 73.27) and a
 Welch t-test gives t≈2.1, p≈0.12. Treat it as suggestive, not proven, and note the price: 14.7M
 added parameters against tied's 2.1M, for a gain roughly the size of one seed's noise. It does
@@ -119,6 +120,54 @@ HRM ties its H level, and nothing here contradicts that choice.
 
 Freezing the core fails both ways: `inject` degrades from the first eval, `inline` sits flat near
 its init for 20 epochs without ever exceeding it. Those two rows remain n=1.
+
+### The timescale sweep — `cff_period > 1` (2026-09-15)
+
+Everything above runs the cycle FF layer **every** cycle, so the "slow" state was never slower than
+the fast one. This sweep gives it a real clock. All arms use `cff_phase: pre` (the slow update opens
+a group of `cff_period` cycles; see the knob table) and the tied 1-layer block of `cff_sft`, so
+parameters (14.7M) and block-forwards (28 + 1) are constant across the graft arms.
+
+![timescale sweep](cycle_ff_timescale.png)
+
+| arm | slow updates / pass | init | best | @ep | last | vs init | vs control |
+|---|---|---|---|---|---|---|---|
+| `rt_sft` — no cycle FF (control, n=3) | 0 | 69.77 | 69.38 ± 0.10 | 1 | 63.5 | −0.39 | — |
+| `cff_sft` (period 1, `post`, n=3) | 7 | 69.77 | 72.82 ± 0.50 | 3 | 66.0 | +3.05 | +3.44 |
+| `cff_sft_pre` (period 1, `pre`, n=3) | 7 | 69.77 | 72.21 ± 0.73 | 4 | 66.1 | +2.44 | +2.83 |
+| `cff_sft_p2` (n=3) | 4 | 69.77 | 71.37 ± 0.52 | 5 | 67.6 | +1.60 | +1.99 |
+| `cff_sft_p3` (n=3) | 3 | 69.77 | 71.59 ± 0.66 | 4.7 | 67.4 | +1.82 | +2.21 |
+| **`cff_sft_p7`** (n=3) | **1** | 69.77 | **76.63 ± 0.39** | 3 | 65.3 | **+6.86** | **+7.25** |
+
+**`cff_sft_p7` — one slow update before the seven core cycles, HRM's schedule — is the best
+configuration found: 76.92 / 76.77 / 76.19, i.e. 76.63 ± 0.39.** That is +7.25 over the matched
+control, more than double the best period-1 arm (+3.44 tied, +4.15 untied), at the *same* 2.1M
+added parameters as tied `cff_sft` and 6 fewer block-forwards per pass. It closes roughly two-thirds of the
+RT→HRM gap (69.4 → 80.7) from a checkpoint that had already converged and started overfitting. The
+curve shape is different in kind: every seed jumps ~4 points in the first epoch (69.8 → 74.0–75.0)
+and peaks at epoch 3, against the +1–2 first-epoch move of every period-1 arm.
+
+`cff_sft_pre` is the control for the placement change: at period 1, `pre` (72.21) and `post`
+(72.82) are within noise, so the +3.8 that `p7` adds over period 1 is the period, not the phase.
+
+**The gain is not monotone in slowness.** Periods 2 and 3 (71.4, 71.6) sit *below* period 1
+(72.2 / 72.8) and only period 7 jumps. Intermediate schedules apparently get the worst of both: the
+slow state is updated too rarely to act as extra per-cycle depth, and too often to be a clean
+per-pass context. The effect switches on at full separation, which is the regime HRM uses
+(`L_cycles: 6` per H step).
+
+| arm (from scratch, 20 ep) | slow updates / pass | params | best | @ep | last |
+|---|---|---|---|---|---|
+| `tuned_rt` (n=4) | 0 | 12.59M | 70.50 ± 0.46 | 6 | 58.5 |
+| `cff_block_tied` (period 1, n=1) | 7 | 14.69M | 70.00 | 6 | 57.9 |
+| `cff_block_tied_p3` (n=3) | 3 | 14.69M | 70.56 ± 2.55 | 6.7 | 58.3 |
+| `cff_block_tied_p7` (n=3) | 1 | 14.69M | 71.82 ± 1.61 | 6.7 | 58.1 |
+
+From scratch the same schedule helps far less: `cff_block_tied_p7` is +1.32 over the RT at n=3, but
+two seeds (72.74 / 72.76) are a clear +2.2 and the third (69.96) is a null, so the mean is not
+established (Welch t≈1.4, p≈0.28). Period 3 from scratch is a null with a 2.55 spread. As with the
+period-1 arms, from-scratch results carry several times the seed variance of the grafts, and the
+1k generalisation gap is not where a from-scratch structural claim can be settled.
 
 ## Setup on a new machine
 
@@ -191,15 +240,40 @@ configuration found — ran at 3 seeds. The queue took 3h40m on 8 H100s, plus 45
 SESSION=cff NPROC=8 ./run_baselines.sh cff_block_untied cff_sft rt_sft cff_sft_lr10 cff_sft_untied
 ```
 
+The period sweep (≈6.5 h: four 8-epoch graft arms at ~43 min each, two 20-epoch from-scratch
+arms at ~108 min each) was launched with the env set explicitly, as the tmux gotcha below advises:
+
+```bash
+tmux new-session -d -s cffp -c "$PWD" \
+    "PATH=/sg-pretrain/liuyixuan/bin:\$PATH RT_CKPT='checkpoints/tuned_rt malachite-saluki/seed_1/best.pt' \
+     SESSION=cffp NPROC=8 bash run_baselines.sh --worker cff_sft_p7 cff_sft_p3 cff_sft_pre cff_sft_p2 \
+     cff_block_tied_p7 cff_block_tied_p3 2>&1 | tee logs/cffp/runner.log"
+```
+
 What is left, now that the graft is the only surviving positive result:
 
 1. **The graft on full Sudoku-Extreme.** Every 1k arm peaks by epoch 6 and then overfits, so the
    whole sweep is measuring a generalisation gap on 1000 puzzles. On full data nothing overfits and
-   the question becomes capability rather than memorisation — the setting where a +3.44 graft would
-   actually matter.
-2. **`cff_period > 1`** — nothing here has real timescale *separation*: the cycle FF layer fires
-   every cycle, so the "slow" state is not slow. This is the structural difference from HRM that
-   the sweep has not yet tested. Also `cff_layers=2`.
+   the question becomes capability rather than memorisation — the setting where a +7.25 graft
+   (`cff_sft_p7`) would actually matter.
+2. **`cff_period > 1`** — nothing above has real timescale *separation*: the cycle FF layer fires
+   every cycle, so the "slow" state is not slow. This is the structural difference from HRM
+   (`H_cycles: 2, L_cycles: 6` — one H step per six L steps) that the sweep had not tested.
+   **Launched 2026-09-15** as tmux session `cffp` (`logs/cffp/`), all at `cff_phase: pre` and
+   `cycles: 7` so the pretrained core, parameters and block-forwards are unchanged:
+
+   | arm | base | slow updates per pass (before cycle) | seeds |
+   |---|---|---|---|
+   | `cff_sft_p7` | `cff_sft` | 1 (cycle 1) — HRM's schedule | 3 |
+   | `cff_sft_p3` | `cff_sft` | 3 (cycles 1, 4, 7) | 3 |
+   | `cff_sft_pre` | `cff_sft` | 7 (every cycle) — control for the `pre` placement itself | 3 |
+   | `cff_sft_p2` | `cff_sft` | 4 (cycles 1, 3, 5, 7) | 3 |
+   | `cff_block_tied_p7` | `cff_block_tied` (from scratch) | 1 | 3 |
+   | `cff_block_tied_p3` | `cff_block_tied` (from scratch) | 3 | 3 |
+
+   **Done** (6.5 h, all exit 0). Result: `cff_sft_p7` 76.63 ± 0.39, the best arm in the sweep — see
+   "The timescale sweep" above. Still untested: `cff_layers=2`; `cff_sft_p7` untied; `cycles` other
+   than 7 (e.g. `cycles: 6` to match HRM exactly, or `cycles: 14, cff_period: 7` for two H steps).
 3. **An LR sweep between 1x and 10x** on the cycle FF layer. 10x destroys the gain and 1x gives
    +3.05; nobody has looked in between, and the fact that the layer must move *with* the core is
    the most mechanistically suggestive thing the sweep has produced.
@@ -223,6 +297,17 @@ tuned_hrm  0.6 16.7 34.1 56.5 63.8 69.2 73.1 76.3 78.5 79.0 80.5 81.0 ...   (sti
 ```
 
 An arm tracking the first line is a null result; only one tracking the second is interesting.
+
+## Figures
+
+`cycle_ff_architectures.png` (RT, `cff_sft_untied` at period 1, `cff_sft_p7` over two recurrent steps, HRM) and
+`cycle_ff_timescale.png` (the sweep) are generated by `experiments/make_cff_figure.py`; the numbers
+are pasted into the script from `collect_cff_results.py`, so re-paste and re-run after re-running
+an arm:
+
+```bash
+uv run --with cairosvg python experiments/make_cff_figure.py
+```
 
 ## Collecting results
 
