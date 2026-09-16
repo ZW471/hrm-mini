@@ -2,7 +2,7 @@
 import math
 import os
 
-W, H = 1440, 2100
+W, H = 1440, 2480
 SANS = "Inter, Helvetica Neue, Helvetica, Arial, sans-serif"
 MONO = "ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
 
@@ -560,6 +560,82 @@ text(tx1, ty + 26, "per-cell targets) instead of having to invent a latent traje
 text(tx1, ty + 40, "cross-entropy, with a soft carry-over (self-conditioning: 24 → 86 at 113M); the parameters go into 16 distinct", 10.5, INK)
 text(tx1, ty + 54, "blocks rather than 4 reused ones; and failures are far-off legal-looking boards that verified restarts re-roll.", 10.5, INK)
 text(tx1, ty + 68, "What it costs: 3.5× HRM's wall clock per puzzle, a sampler to tune, and early stopping at epoch 3–4 (it overfits by 5–7).", 10.5, INK)
+
+rule(yF + 452)
+
+# =============================================================================================
+# Panel G: accuracy against inference wall clock
+# =============================================================================================
+yG = yF + 486
+text(32, yG, "The step count is a test-time-compute dial: 63 % at HRM's wall clock, 98 % at 28× it", 17, INK, weight="700")
+text(32, yG + 20, "full test_hard (20,000 puzzles), single sample, one H100, torch.compile, batch 2048 · outputs/dfm_sizes/steps/ · eval.py --cycles for HRM", 11.5, MUTED, mono=True)
+gx0, gy0, gw, gh = 60, yG + 52, 560, 240
+TMIN, TMAX = 5.0, 1200.0
+def TX(t): return gx0 + (math.log10(t) - math.log10(TMIN)) / (math.log10(TMAX) - math.log10(TMIN)) * gw
+def TY(v): return gy0 + gh - (v - 50) / 50 * gh
+add(f'<line x1="{gx0}" y1="{gy0}" x2="{gx0}" y2="{gy0+gh}" stroke="{RULE}" stroke-width="1"/>')
+add(f'<line x1="{gx0}" y1="{gy0+gh}" x2="{gx0+gw}" y2="{gy0+gh}" stroke="{RULE}" stroke-width="1"/>')
+for v in (50, 60, 70, 80, 90, 100):
+    add(f'<line x1="{gx0}" y1="{TY(v)}" x2="{gx0+gw}" y2="{TY(v)}" stroke="{RULE}" stroke-width="0.6" stroke-dasharray="2,3"/>')
+    text(gx0 - 6, TY(v) + 4, f"{v}", 9.5, MUTED, "end")
+for t in (5, 10, 20, 50, 100, 200, 500, 1000):
+    add(f'<line x1="{TX(t)}" y1="{gy0+gh}" x2="{TX(t)}" y2="{gy0+gh+4}" stroke="{MUTED}" stroke-width="1"/>')
+    text(TX(t), gy0 + gh + 15, f"{t}", 9.5, MUTED, "middle")
+text(gx0 + gw / 2, gy0 + gh + 30, "wall clock for the whole split, seconds (log scale)", 9.5, MUTED, "middle")
+text(gx0 - 6, gy0 - 8, "test_hard exact match (%), full split", 9.5, MUTED, "start")
+# HRM reference band (n=6, 16 cycles)
+add(f'<line x1="{gx0}" y1="{TY(80.65)}" x2="{gx0+gw}" y2="{TY(80.65)}" stroke="{PURP}" stroke-width="1.2" stroke-dasharray="6,4"/>')
+add(f'<rect x="{TX(14.8)-5}" y="{TY(80.65)-5}" width="10" height="10" fill="{PURP}" transform="rotate(45 {TX(14.8)} {TY(80.65)})"/>')
+text(TX(1150), TY(80.65) - 6, "tuned_hrm, n=6, 16 cycles: 80.65 ± 2.40 @ 15 s", 9.5, PURP, "end", "700")
+def curve(pts, col, width=2.2, dashed=False, r=3.5):
+    add('<polyline points="' + " ".join(f"{TX(t):.1f},{TY(v):.1f}" for t, v in pts) + f'" fill="none" stroke="{col}" stroke-width="{width}" stroke-linejoin="round"' + (' stroke-dasharray="5,3"' if dashed else '') + '/>')
+    for t, v in pts:
+        add(f'<circle cx="{TX(t)}" cy="{TY(v)}" r="{r}" fill="{col}" stroke="#ffffff" stroke-width="1"/>')
+hrm_c = [(7.4, 69.8), (14.8, 73.6), (29.6, 76.5), (59.1, 78.6), (118.1, 80.4)]
+d13 = [(6.5, 54.7), (13.1, 63.5), (26.3, 72.2), (52.7, 81.9), (105.4, 90.0), (210.7, 95.0), (421.9, 98.2)]
+d7 = [(39.3, 81.8), (78.6, 90.4), (157.0, 95.8)]
+d113 = [(236.4, 84.8), (470.5, 91.6), (946.2, 94.8)]
+curve(hrm_c, PURP, 1.8, dashed=True)
+curve(d113, BLUE, 1.8, dashed=True)
+curve(d7, GRN, 1.8, dashed=True)
+curve(d13, GRN, 2.6, r=4.5)
+# legend, lower right
+lgx, lgy = TX(230), TY(70)
+def lg(y, col, label, dashed=False, width=2.2):
+    add(f'<line x1="{lgx}" y1="{y-4}" x2="{lgx+28}" y2="{y-4}" stroke="{col}" stroke-width="{width}"' + (' stroke-dasharray="5,3"' if dashed else '') + '/>')
+    text(lgx + 34, y, label, 9.5, col, "start")
+lg(lgy, GRN, "DFM 13M, n=3, 16 → 1024 steps (+8–10 / doubling)", width=2.6)
+lg(lgy + 15, GRN, "DFM 7.4M, seed 1, 128 → 512 steps", dashed=True)
+lg(lgy + 30, BLUE, "DFM 113M, seed 1, 128 → 512 steps", dashed=True)
+lg(lgy + 45, PURP, "HRM precise-ant (73.6 % seed), 8 → 128 cycles (+2 / dbl)", dashed=True)
+for (t, v), lab in zip(d13, ["16", "32", "64", "128", "256", "512", "1024"]):
+    text(TX(t) - 6, TY(v) - 7, lab, 8.5, GRN, "end")
+text(TX(13.1) + 8, TY(63.5) + 3, "= HRM's wall clock: 63.5 %", 9.5, INK, "start", "700")
+
+# right column: reading the chart
+rx = 660
+rows = [
+    ("At HRM's cost", "32 steps = 13 s for 20k puzzles: 63.5 ± 1.4 %, seventeen points behind HRM. HRM is the"),
+    ("",              "better solver per second up to ~50 s; the DFM draws level at 128 steps (4× HRM's wall clock)."),
+    ("Past it",       "+8–10 points per doubling of steps: 90 % @ 256, 95 % @ 512, 98.2 ± 0.6 % @ 1024 (28×)."),
+    ("",              "Single sample, no verifier, no restarts. The 7.4M model is better per second than the 13M;"),
+    ("",              "the 113M model, 9× the cost per step, is the worst deal above 50 s."),
+    ("HRM's dial",    "More segments than trained with: 69.8 → 80.4 from 8 to 128 cycles, ~+2 per doubling,"),
+    ("",              "15 points short of the DFM at the same 118 s (on a weak seed — read the slope, not the level)."),
+    ("Why",           "η fixes the re-noising rate per unit time, so total repair is step-independent; the step"),
+    ("",              "count sets how many cells jump at once on a stale posterior. Fewer simultaneous jumps, each"),
+    ("",              "seen by the next self-conditioned evaluation, is the §6 guess-and-repair given more turns;"),
+    ("",              "larger η (40 at 1024 steps) pays off only once there are enough evaluations to repair it."),
+    ("So",            "HRM is a fixed-cost 80 % solver. The same-size DFM is a dial from 55 % at half HRM's cost to"),
+    ("",              "98 % at 28× — and 512 steps of one trajectory (95 %) beats 8 verified restarts of 128 (97.7 %"),
+    ("",              "on the easier 512 subset) at less than twice the cost, with no verifier in the loop."),
+]
+ry = yG + 60
+for k, line in rows:
+    if k:
+        text(rx, ry, k, 10.5, INK, "start", "700")
+    text(rx + 96, ry, line, 10.5, INK)
+    ry += 16
 
 add('</svg>')
 open(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "flow_matching_architecture.svg"), "w").write("\n".join(out))

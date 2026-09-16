@@ -7,7 +7,10 @@ counterpart (`experiments/dfm_sudoku.py`, runs `dfm_113m_*`), which on 1k puzzle
 50 % to **84.5 ± 1.2 % single-shot on the full `test_hard` split (n=3)** and overtakes HRM's
 80.65 ± 2.40; §8 shrinks it to **HRM's own parameter count (13M), where it ties HRM — 81.5 ± 0.5 —
 in a twentieth of the training compute and at 3.5× the inference wall clock**, and works out why.
-The visual abstract is `flow_matching_architecture.{svg,png}`.
+The sampler's step count then turns out to be a test-time-compute dial: **the same 13M model gives
+63.5 % at HRM's wall clock, 90 % at 7×, 95 % at 14× and 98.2 ± 0.6 % at 28×**, single sample, on
+the full split — while HRM given more segments gains ~2 points per doubling. The visual abstract is
+`flow_matching_architecture.{svg,png}`.
 
 ---
 
@@ -409,10 +412,57 @@ against 80.65 ± 2.40, +0.9 with a far tighter seed spread, every DFM seed above
 HRM's range — gets there with 22× less training compute and in a seventeenth of the GPU-hours on one
 card, and pays for it with 2.3× the inference MACs, which is **3.5× the wall clock** (52 s against
 15 s for the 20,000-puzzle split; the narrow 256-wide blocks and the 256 sequential network calls
-per solve run at lower arithmetic intensity than HRM's 448 calls at 512 wide). Verified restarts to
-98 % add ≈ 1.4× more on average (84 % need one draw, 6 % two, and so on). The 113M model is the one
-that actually beats HRM, 84.5 ± 1.2, +3.9 with non-overlapping seed ranges — for 9× the parameters
-and 16× the wall clock.
+per solve run at lower arithmetic intensity than HRM's 448 calls at 512 wide). At 128 steps, that
+is. The next subsection shows the step count is a dial: 63.5 % at HRM's wall clock, 95 % at 14× it,
+98 % at 28×. The 113M model at 128 steps beats HRM, 84.5 ± 1.2, +3.9 with non-overlapping seed
+ranges — for 9× the parameters and 16× the wall clock — but per second it is the worst of the three
+sizes.
+
+### Accuracy against inference compute: the step count is a test-time-compute dial
+
+The 128-step sampler above was tuned on a {64, 128} grid and is far from saturated. Sweeping the
+CTMC step count on the full split (`outputs/dfm_sizes/steps/`; three seeds of the 13M model, the
+best η per step count, guidance 3; one H100, batch 2048, compiled), against HRM given more
+recurrent segments at inference (`eval.py --cycles`; the one local HRM checkpoint, `precise-ant`
+epoch 19, whose 16-cycle score is 73.6 — a weak seed, so read HRM's *slope* from it, not its level):
+
+| wall clock, 20k puzzles | DFM 13M, n=3 | DFM 7.4M (seed 1) | DFM 113M (seed 1) | HRM `precise-ant` (cycles) | HRM n=6 reference |
+|---|---|---|---|---|---|
+| 6.5–7 s | 54.7 ± 2.4 (16 steps) | | | 69.8 (8) | |
+| 13–15 s | **63.5 ± 1.4 (32 steps)** | | | 73.6 (16) | **80.65 ± 2.40 (16)** |
+| 26–30 s | 72.2 ± 0.9 (64) | | | 76.5 (32) | |
+| 53–59 s | 81.9 ± 0.2 (128) | 39 s: 81.8 (128) | | 78.6 (64) | |
+| 105–118 s | 90.0 ± 0.5 (256, η 20) | 79 s: 90.4 (256) | | 80.4 (128) | |
+| 211 s | 95.0 ± 0.8 (512, η 20) | 157 s: 95.8 (512) | | | |
+| 421 s | **98.2 ± 0.6 (1024, η 40)** | | 470 s: 91.6 (256) | | |
+| 946 s | | | 94.8 (512) | | |
+
+Three readings of this table.
+
+- **At HRM's wall clock the DFM loses.** 32 steps take the same 13 s as HRM's 16 segments and give
+  63.5 %, seventeen points below HRM; the DFM needs ~4× HRM's wall clock (128 steps) to draw level.
+  HRM is the better solver per second up to about 50 s per 20k puzzles. That is the answer to "how
+  does the 13M model do at 32 steps".
+- **Past that the DFM keeps buying accuracy and HRM barely does.** Every doubling of steps is worth
+  +8–10 points for the DFM from 16 to 512 steps, then +3 to 1024: 90 % at 256 steps, 95 % at 512,
+  98.2 % at 1024 — single sample, no verification, no restarts. HRM given more segments than it was
+  trained with gains about +2 per doubling (69.8 → 80.4 from 8 to 128 cycles) and is still 15
+  points short of the DFM at the same 118 s. The 7.4M model is *more* efficient than the 13M one per
+  second (95.8 at 157 s), and the 113M model, at 9× the cost per step, is the worst deal above 50 s.
+- **Why steps help this much.** `η` sets the *rate* of re-noising per unit time, so the expected
+  amount of repair is the same at every step count; what the step count changes is how many cells
+  jump *at once* on a stale posterior. Euler on a CTMC moves every disagreeing cell independently
+  given the same `x_t`; at 32 steps that is dozens of simultaneous, mutually unaware jumps per step,
+  at 1024 a handful, each seen by the next self-conditioned evaluation before the following one.
+  Larger η also becomes usable as the steps grow (η 40 at 1024 steps beats η 20 by 0.8), because
+  more re-noising is only useful if the model gets enough evaluations to repair it. So the curve is
+  the §6 mechanism — guess, then constraint-directed repair — given more turns.
+
+The consequence for the comparison: the HRM-sized flow model is not "as good as HRM"; it is a
+different trade. HRM is a fixed-cost solver at 80 % that does not improve much with more compute.
+The DFM at the same size is a dial from 55 % at half HRM's cost to 98 % at 28× it. The verified
+restarts of §7 (97.7 % at 8 draws of 128 steps ≈ 8× cost) sit *below* this curve — 512 steps of one
+trajectory (14× cost) reaches 95 % without any verifier at all.
 
 ### Inductive bias
 
@@ -520,10 +570,13 @@ self-conditioning (§7) reaches 84.5 ± 1.2 % on the full `test_hard` split from
 puzzles at the same budget, three seeds — above HRM's 80.65 ± 2.40, non-overlapping ranges — with
 no recurrence, no latent, no Sudoku-specific structure beyond a row/column positional encoding, and
 3 epochs of training. At 113M it is 9.4× larger and 16× slower per puzzle; shrunk to HRM's own 13M
-(§8) it ties HRM (81.5 ± 0.5), reaches its peak with 22× less training compute, and costs 3.5× HRM's
-wall clock per puzzle. That leaves HRM its inference-efficiency claim — it is the fastest 80 %
-solver here by a factor of 3.5 — and makes the parameter- and *data*-efficiency claims a tie against
-this comparison class rather than a win.
+(§8) it ties HRM (81.5 ± 0.5) at 128 sampler steps, reaches its peak with 22× less training
+compute, and costs 3.5× HRM's wall clock per puzzle at that setting. That leaves HRM its
+inference-efficiency claim — it is the fastest 80 % solver here by a factor of ~4, and at HRM's own
+wall clock the DFM is at 63.5 % — and makes the parameter- and *data*-efficiency claims a tie
+against this comparison class rather than a win. What HRM does not have is the dial: the same 13M
+flow model reaches 95 % at 14× HRM's cost and 98 % at 28×, single sample, where HRM given more
+segments stalls in the low 80s.
 
 **Iteration at inference is not, by itself, what makes a model data-efficient.** The continuous
 flow model iterates 64 times and revises its own answer, and on 1k it still memorises the orbit.
@@ -572,6 +625,11 @@ NAME_SUFFIX=_n3 STOP_STEP=30000 ./run_dfm_sizes.sh L16d256:lr3:1 L16d256:lr3:2 L
 uv run python experiments/eval_dfm_sudoku.py --ckpt checkpoints/dfm_L16d256_unif_sc2t_lr3_n3_cfg_1k/seed_1/best.pt \
     --sample-steps 128 --noise-scale 10 20 --guidance 3 5 --restarts 8
 uv run python experiments/collect_dfm_sizes.py logs/dfmsizes* logs/dfmlr* logs/dfmtiny* logs/dfmn3   # in-training table
+
+# full split + wall clock (one H100), and the step-count dial
+uv run python experiments/eval_dfm_sudoku.py --ckpt checkpoints/dfm_L16d256_unif_sc2t_lr3_n3_cfg_1k/seed_1/best.pt \
+    --num-puzzles 20000 --batch 2048 --compile --sample-steps 32 128 512 1024 --noise-scale 3 10 20 40 --guidance 3
+uv run python eval.py --ckpt "checkpoints/tuned_hrm precise-ant/seed_1/epoch_19.pt" --split test_hard --batch-size 512 --cycles 16
 ```
 
 The figure is generated by `experiments/make_flow_figure.py` (writes the SVG); the PNG is the SVG

@@ -17,12 +17,15 @@ def evaluate():
     parser.add_argument("--ckpt", type=str, required=True, help="Path to the saved checkpoint (.pt file)")
     parser.add_argument("--split", type=str, default="test", help="Dataset split to evaluate on")
     parser.add_argument("--batch-size", type=int, default=None, help="Eval batch size (default: the training local batch)")
+    parser.add_argument("--cycles", type=int, default=None, help="Recurrent segments at inference (default: the training cycles_per_data)")
     args = parser.parse_args()
 
     # Load config
     with open(os.path.join(os.path.dirname(args.ckpt), "model_config.json"), "r") as f:
         config_dict = yaml.safe_load(f)
     config = TrainConfig(**config_dict)
+    if args.cycles is not None:
+        config.cycles_per_data = args.cycles
 
     # Initialize Dataloader
     create_dataloader = load_module(f"dataset.{config.data.name}@create_dataloader")
