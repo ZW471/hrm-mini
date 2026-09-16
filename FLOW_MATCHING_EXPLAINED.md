@@ -417,7 +417,7 @@ result.
 | stochasticity | none | prior, jumps, η, restarts |
 | carry-over between steps | full-width latents (`z_L`, `z_H`) | the hard tokens *plus* the previous posterior (self-conditioning) |
 | puzzle | as the input, injected into every step (`z_L + z_H + x`) | as an additive embedding, plus the givens pinned in the state; dropped 10 % for CFG |
-| Sudoku-specific structure | none (1D RoPE; the 2D variant `tuned_hrm_rope2d` exists) | none beyond axial 2D RoPE (row/col; no 3×3-box prior); `--givens soft` removes even the pinning at no cost at 113M |
+| Sudoku-specific structure | none (1D RoPE; the 2D variant `tuned_hrm_rope2d` exists) | none beyond axial 2D RoPE (row/col; no 3×3-box prior); `--givens soft` removes even the pinning at no cost at 113M. **With HRM's 1D RoPE the 13M model drops to 78.6 ± 4.9 (n=3: 74.2 / 84.0 / 77.5)** — it learns ~2× slower and one seed in three still reaches the 2D number, so the geometry is learnable but the prior buys speed and stability |
 | output check | none | a valid board is a correct one, so it can verify and restart |
 
 ### Why it is better — what the evidence supports
@@ -475,6 +475,11 @@ problem is easier to learn from 1000 examples, not that it reasons more.
 - The in-training peaks of the five 13M runs ranged 81–87 % and identical seeds do not reproduce
   (`torch.compile`, GPU multinomial), so the ± 1.2 offline is the number to carry, not any single
   seed.
+- The 2D RoPE is the one piece of Sudoku geometry the DFM is told and HRM is not. Removing it
+  (`--pos-embed rope1d`, three seeds) costs 5.5 points on average and most of the seed stability:
+  78.6 ± 4.9, i.e. level with HRM's 80.65 ± 2.40 rather than above it. Read the +3.5 as "with the
+  row/column prior"; the like-for-like-encoding number is a tie. (`tuned_hrm_rope2d` exists in
+  `config/` for the converse experiment but has no seeds logged in this repo.)
 - LR was tuned for the DFM ({1e-4, 3e-4, 1e-3}) and not re-tuned for HRM; `tuned_hrm` is the
   repo's tuned configuration, but at 13M the DFM's win depends on the LR (79.5 at 1e-4 vs 84.1 at
   3e-4), so the comparison is best-known recipe against best-known recipe, not matched tuning effort.

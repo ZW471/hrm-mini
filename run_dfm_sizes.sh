@@ -10,6 +10,7 @@
 #     soft   --givens soft   (the given cells are generated, not clamped -- puzzle is a hint only)
 #     lr3    --lr 3e-4
 #     lr10   --lr 1e-3
+#     lr3rope1d  --lr 3e-4 --pos-embed rope1d   (drop the axial 2D RoPE; the board is a length-81 sequence)
 #     long   (no flag) names a full-schedule run so it does not overwrite the early-stopped one
 #
 #   ./run_dfm_sizes.sh                                # default queue below, 8 GPUs
@@ -47,6 +48,7 @@ variant_flags() {
         lr3)    echo "--lr 3e-4" ;;
         lr10)   echo "--lr 1e-3" ;;
         lr3long) echo "--lr 3e-4" ;;         # lr3 under a distinct name, for STOP_STEP=60000 reruns
+        lr3rope1d) echo "--lr 3e-4 --pos-embed rope1d" ;;   # 1D RoPE over the flattened 81 cells (HRM's default)
         long)   echo "" ;;                  # name-only tag: same recipe, run with STOP_STEP=83200
         *)      echo "unknown variant tag: $1" >&2; return 1 ;;
     esac
