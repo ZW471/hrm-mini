@@ -16,6 +16,10 @@
 #   ./run_dfm_sizes.sh L8d512 L4d512 L16d256          # just those, spread over GPUs
 #   GPUS="4 5 6 7" ./run_dfm_sizes.sh L8d256:lr3      # restrict to some GPUs
 #   STOP_STEP=40000 ./run_dfm_sizes.sh ...            # default 30000; schedule length is unchanged
+#   WANDB_TAGS="experimental" ./run_dfm_sizes.sh ...  # tag the W&B runs (space-separated)
+#   WANDB_MODE=offline ./run_dfm_sizes.sh ...          # log locally; `wandb sync wandb/offline-run-*` later
+#   NAME_SUFFIX=_n3 ./run_dfm_sizes.sh L16d256:lr3:1  # -> dfm_L16d256_unif_sc2t_lr3_n3_cfg_1k, a fresh
+#                                                     #    checkpoint dir instead of overwriting the old one
 #
 # Runs are dealt round-robin to the GPUs in $GPUS; each GPU works through its share sequentially.
 # Run names: dfm_L<l>d<d>_unif_sc2t[_<tag>]_cfg_1k; logs in logs/$SESSION/.
@@ -29,6 +33,8 @@ SESSION="${SESSION:-dfmsizes}"
 GPUS="${GPUS:-0 1 2 3 4 5 6 7}"
 STOP_STEP="${STOP_STEP:-30000}"
 EXTRA_ARGS="${EXTRA_ARGS:-}"
+WANDB_TAGS="${WANDB_TAGS:-}"
+NAME_SUFFIX="${NAME_SUFFIX:-}"
 PYTHON="${PYTHON:-$REPO/.venv/bin/python}"
 
 DEFAULT_RUNS=(L16d512 L8d512 L4d512 L16d256 L8d384 L8d256 L4d256 L16d768:soft
@@ -79,9 +85,11 @@ if [[ "${1:-}" == "--worker" ]]; then
         [[ "$size" =~ ^L([0-9]+)d([0-9]+)$ ]] || { echo "bad size: $size" >&2; failed=1; continue; }
         layers="${BASH_REMATCH[1]}"; hidden="${BASH_REMATCH[2]}"
         tag_flags="$(variant_flags "${tag:-}")" || { failed=1; continue; }
-        name="dfm_${size}_unif_sc2t${tag:+_$tag}_cfg_1k"
+        name="dfm_${size}_unif_sc2t${tag:+_$tag}${NAME_SUFFIX}_cfg_1k"
         # shellcheck disable=SC2206
         extra=($tag_flags $EXTRA_ARGS)
+        # shellcheck disable=SC2206
+        [[ -n "$WANDB_TAGS" ]] && extra+=(--wandb-tags $WANDB_TAGS)
         [[ -n "$STOP_STEP" ]] && extra+=(--stop-step "$STOP_STEP")
 
         echo "=== gpu$gpu $name seed=$seed START $(date '+%F %T') ==="
@@ -126,7 +134,7 @@ done
 first=1
 for g in "${gpu_list[@]}"; do
     [[ -z "${queue[$g]:-}" ]] && continue
-    cmd="SESSION='$SESSION' STOP_STEP='$STOP_STEP' EXTRA_ARGS='$EXTRA_ARGS' PYTHON='$PYTHON' '$REPO/run_dfm_sizes.sh' --worker $g ${queue[$g]} 2>&1 | tee -a '$REPO/logs/$SESSION/runner.log'"
+    cmd="WANDB_MODE='${WANDB_MODE:-}' SESSION='$SESSION' STOP_STEP='$STOP_STEP' EXTRA_ARGS='$EXTRA_ARGS' WANDB_TAGS='$WANDB_TAGS' NAME_SUFFIX='$NAME_SUFFIX' PYTHON='$PYTHON' '$REPO/run_dfm_sizes.sh' --worker $g ${queue[$g]} 2>&1 | tee -a '$REPO/logs/$SESSION/runner.log'"
     if [[ $first -eq 1 ]]; then
         tmux new-session -d -s "$SESSION" -n "gpu$g" -c "$REPO" "$cmd"; first=0
     else

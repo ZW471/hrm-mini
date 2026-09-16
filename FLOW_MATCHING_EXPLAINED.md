@@ -335,15 +335,16 @@ Caveats that the figure states and that should be carried with the numbers:
 
 ### How small can it be?
 
-`outputs/dfm_sizes/README.md` sweeps the same recipe over backbone size on 1k (single seed, one GPU
-per run, `run_dfm_sizes.sh`). Two findings. **Depth is what matters**: every 12–16-block model from
+`outputs/dfm_sizes/README.md` sweeps the same recipe over backbone size on 1k (one GPU per run,
+`run_dfm_sizes.sh`; single seed except where an ± is given). Two findings. **Depth is what matters**: every 12–16-block model from
 13M to 52M peaks at ~80 % in-training at LR 1e-4, while 4–8-block models of any width stay at
 35–64 % — `L4d512`, which has exactly HRM's 12.58M of transformer weights, gets 35 %, and the same
 count arranged as `L16d256` gets 79.5 %. **Small models want a higher LR**: at 3e-4 the 13M
-`L16d256` reaches 87.1 / 84.2 % in-training (two seeds) and **85.9 / 85.2 % offline** with the tuned
-sampler — HRM's parameter count, ~5 points above HRM, in 15k steps. A 7.4M model (`L16d192`, lr 1e-3)
-is at 84.2 % offline and a 3.3M one (`L16d128`) at 78.7 %; the recipe gives out below ~2.5M. Per
-solve the 13M model costs ~2.3× HRM's MACs, not the 113M model's 20×.
+`L16d256` reaches **84.1 ± 1.2 % offline over three seeds** with the tuned sampler — HRM's parameter
+count, +3.5 over HRM's 80.65 ± 2.40, every seed above HRM's mean, in 15k steps. A 7.4M model
+(`L16d192`) is at 82.5 ± 2.5 (n=3, lr 3e-4 or 1e-3) and a 3.3M one (`L16d128`, single seed) at
+78.7 %; the recipe gives out below ~2.5M. Per solve the 13M model costs ~2.3× HRM's MACs, not the
+113M model's 20×.
 
 The sweep also tried **soft givens** (`--givens soft`): the given cells are noised, predicted and
 scored like every other cell and never written back, so the puzzle is a hint through `cond_embed`

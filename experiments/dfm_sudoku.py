@@ -305,6 +305,7 @@ def main():
     parser.add_argument("--eval-interval", type=int, default=2500)
     parser.add_argument("--wandb-keys", type=str, nargs="*", default=None)
     parser.add_argument("--wandb-project", type=str, default="sudoku")
+    parser.add_argument("--wandb-tags", type=str, nargs="*", default=None, help="Tags for the W&B run (e.g. experimental)")
     parser.add_argument("--no-wandb", action="store_true")
     parser.add_argument("--no-compile", action="store_true")
     args = parser.parse_args()
@@ -367,7 +368,7 @@ def main():
               f"{solutions.shape[0]} boards, {args.local_batch_size * world_size} global batch, "
               f"{args.train_steps} steps", flush=True)
         if use_wandb:
-            wandb.init(project=args.wandb_project, name=run_name, group=run_name,
+            wandb.init(project=args.wandb_project, name=run_name, group=run_name, tags=args.wandb_tags,
                        config=vars(args) | {"num_params": num_params, "world_size": world_size},
                        settings=wandb.Settings(x_disable_stats=True))
 
