@@ -52,6 +52,8 @@ outputs/
 wandb/
 runs/
 logs/
+# per-step eval dumps of the LLM baselines (jsonl + rank logs)
+diag/
 *.ckpt
 *.pt
 *.pth
@@ -80,9 +82,8 @@ desktop.ini
 
 
 
-# LLM-baseline virtualenv
-.venv-llm/
-.venv-vllm/
+# LLM-baseline virtualenvs (uv drops its own .gitignore in each, this is belt and braces)
+.venv-*/
 
 # reasoning-baseline rollouts (large JSONL of token ids)
 rollouts/
