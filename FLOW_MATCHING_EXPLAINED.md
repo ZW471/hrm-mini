@@ -4,7 +4,10 @@ A companion to `outputs/flow_matching/README.md` (the results log) and `outputs/
 (the mechanism study). This one explains the idea, the code that implements it, and what the two
 HRM-matched runs — `flow_113m_cfg_1k` and `flow_113m_cfg_full` — concluded. §7 adds the **discrete**
 counterpart (`experiments/dfm_sudoku.py`, runs `dfm_113m_*`), which on 1k puzzles goes from
-50 % to 86.5 ± 0.8 % single-shot (n=3) and overtakes HRM. The visual abstract is `flow_matching_architecture.{svg,png}`.
+50 % to 86.5 ± 0.8 % single-shot (n=3) and overtakes HRM; §8 shrinks it to **HRM's own parameter
+count (13M) and still beats HRM, 84.1 ± 1.2 vs 80.65 ± 2.40**, in a twentieth of the training
+compute, and works out what that costs at inference and why it happens. The visual abstract is
+`flow_matching_architecture.{svg,png}`.
 
 ---
 
@@ -143,8 +146,8 @@ still leaves matched pairs.
 The per-step training compute is roughly matched too: one flow step is one pass through 16 blocks at
 768 wide (113M MACs per cell); one HRM step is 28 block-forwards at 512 wide (88M). Inference is
 not matched at all — 256 evaluations × 16 blocks against HRM's 16 recurrent steps × 28 blocks is
-about 20× more compute per solve, and the flow model has 9.4× the parameters. Section 7 comes back
-to that.
+about 20× more compute per solve, and the flow model has 9.4× the parameters. Section 8 comes back
+to that with a model of HRM's size.
 
 Provenance, since the checkpoint directory is easy to misread:
 
@@ -336,15 +339,13 @@ Caveats that the figure states and that should be carried with the numbers:
 ### How small can it be?
 
 `outputs/dfm_sizes/README.md` sweeps the same recipe over backbone size on 1k (one GPU per run,
-`run_dfm_sizes.sh`; single seed except where an ± is given). Two findings. **Depth is what matters**: every 12–16-block model from
-13M to 52M peaks at ~80 % in-training at LR 1e-4, while 4–8-block models of any width stay at
-35–64 % — `L4d512`, which has exactly HRM's 12.58M of transformer weights, gets 35 %, and the same
-count arranged as `L16d256` gets 79.5 %. **Small models want a higher LR**: at 3e-4 the 13M
-`L16d256` reaches **84.1 ± 1.2 % offline over three seeds** with the tuned sampler — HRM's parameter
-count, +3.5 over HRM's 80.65 ± 2.40, every seed above HRM's mean, in 15k steps. A 7.4M model
-(`L16d192`) is at 82.5 ± 2.5 (n=3, lr 3e-4 or 1e-3) and a 3.3M one (`L16d128`, single seed) at
-78.7 %; the recipe gives out below ~2.5M. Per solve the 13M model costs ~2.3× HRM's MACs, not the
-113M model's 20×.
+`run_dfm_sizes.sh`; single seed except where an ± is given). Two findings. **Depth is what matters**:
+every 12–16-block model from 13M to 52M peaks at ~80 % in-training at LR 1e-4, while 4–8-block
+models of any width stay at 35–64 % — `L4d512`, which has exactly HRM's 12.58M of transformer
+weights, gets 35 %, and the same count arranged as `L16d256` gets 79.5 %. **Small models want a
+higher LR**: at 3e-4 the 13M `L16d256` reaches 84.1 ± 1.2 % offline over three seeds; a 7.4M
+`L16d192` is at 82.5 ± 2.5 (n=3) and a 3.3M `L16d128` (single seed) at 78.7 %; the recipe gives out
+below ~2.5M. §8 takes the 13M model as the like-for-like comparison with HRM.
 
 The sweep also tried **soft givens** (`--givens soft`): the given cells are noised, predicted and
 scored like every other cell and never written back, so the puzzle is a hint through `cond_embed`
@@ -362,11 +363,123 @@ What helps is being able to see a soft posterior over the whole board and correc
 prior over mask (so every cell is up for revision), self-conditioning (so the revision is informed
 by the previous estimate rather than a hard resample), and more of both. That is a description of
 an iterative solver with a readable working state, which is closer to what HRM's `z_L`/`z_H`
-provide than to what a velocity field provides. The §8 candidate — that a classification readout
+provide than to what a velocity field provides. The §9 candidate — that a classification readout
 is the key — is half right: the cross-entropy is necessary but it needs the self-conditioned state
 to pay off.
 
-## 8. So what does this say about HRM?
+## 8. Same size as HRM: what the 13M discrete flow model costs and why it wins
+
+`dfm_L16d256_unif_sc2t_lr3_n3_cfg_1k`, three seeds, against `tuned_hrm`, six seeds. Same 1000
+puzzles, same augmentation, same global batch (768), same 512 `test_hard` puzzles, both reported at
+their best evaluation (HRM: best epoch; DFM: best checkpoint, then a 2 × 2 sampler grid — see the
+caveat at the end). MACs are per cell per block-forward, `12·d²` (attention projections `4d²` +
+MLP `8d²`; the `81 × d` attention scores are < 5 % and ignored); FLOPs are 2 × MACs.
+
+### Size, FLOPs, training time
+
+| | **HRM** (`tuned_hrm`) | **DFM 13M** (`L16d256`, lr 3e-4) | DFM 113M (`L16d768`) |
+|---|---|---|---|
+| parameters | 12.59M | 13.12M (1.04×) | 117.99M (9.4×) |
+| transformer weights | 4 blocks × 3.15M, 512 wide | 16 blocks × 0.79M, 256 wide | 16 blocks × 7.08M, 768 wide |
+| `test_hard` single-shot | 80.65 ± 2.40 (n=6) | **84.1 ± 1.2** (n=3: 85.2 / 82.8 / 84.4) | 86.5 ± 0.8 (n=3) |
+| + 8 verified restarts | — (deterministic) | 98.0 | 97.7 |
+| **inference**: block-forwards per solve | 16 segments × 28 = 448 | 128 steps × 2 (CFG) × 16 = 4,096 | 4,096 |
+| inference MACs per cell / per board | 1.41 G / 114 G | 3.22 G / 261 G (**2.3×**) | 29.0 G / 2.35 T (20.6×) |
+| **training**: MACs per cell per optimizer step | 264 M (28 fwd + BPTT bwd) | 50 M (1 graded fwd+bwd, ½ × 2 no-grad fwd) | 453 M |
+| steps to best | 46–79k (epoch 11–19; mean ≈ 62k) | 15k (epoch 3.6) | 12.5k (epoch 3) |
+| training FLOPs to best (batch 768 × 81 cells) | 2.1 × 10¹⁸ | 9.4 × 10¹⁶ (**22× less**) | 7.0 × 10¹⁷ (2.9× less) |
+| wall clock to best | ~28 min on 8 H100 for the full 83k steps → ≈ 2.9 GPU-h | 10.4 min on **one** H100 (≈ 0.17 GPU-h, 17× less) | 9 min on 8 H100 (≈ 1.2 GPU-h) |
+| learning rate | 1e-4, constant (`lr_min_ratio 1.0`) | 3e-4, cosine (stopped at 30k of 83k) | 1e-4, cosine |
+| test-time knobs | none | steps, η, guidance | steps, η, guidance |
+
+So at the same parameter count the discrete flow model is 3.5 points better single-shot (every seed
+above HRM's mean; HRM's six seeds top out at 82.3), gets there with 22× less training compute and
+in a sixth of the GPU-hours on one card, and pays for it with 2.3× the inference compute per solve
+(≈ 1.4× more again on average if verified restarts are allowed to run to 98 %: 84 % need one draw,
+6 % two, and so on). The 113M model buys another 2.4 points for 9× the parameters and 20× the inference —
+worth having as a ceiling, not as the comparison.
+
+### Inductive bias
+
+Both are bidirectional transformers over 81 cells that iterate. Everything else about *how* they
+iterate differs, and the ablations in §7 and `outputs/dfm_sizes/` say which differences carry the
+result.
+
+| | HRM | discrete flow model |
+|---|---|---|
+| what is iterated | two latents, `z_L` (every step) and `z_H` (every 6th) | the board itself, as 81 tokens |
+| where the iteration lives | inside the network: 28 block-forwards per segment, 16 segments, one carry | in the sampler: 128 CTMC steps; the network is a plain 16-block feed-forward encoder |
+| weight reuse | 4 blocks, each applied 7× per segment (2 L-blocks × 12 + 2 H-blocks × 2 = 28) | 16 distinct blocks, each applied once per evaluation |
+| timescales | two (H/L) | one, the corruption level `t`; no slow/fast split |
+| what the intermediate state looks like in training | whatever the network makes it (latents; no gradient across the carry, BPTT within a segment) | an explicit noisy board *sampled from the forward process* — the model is teacher-forced on its own working state at every corruption level |
+| supervision | solution cross-entropy at the end of every segment, from the same puzzle → solution pair | solution cross-entropy on every non-given cell at a random `t`; each draw is a different partial board |
+| revision | latents can change; the readout is recomputed each segment | any cell can jump to a new digit (uniform prior); η re-noises cells; a failed board is redrawn (restarts) |
+| stochasticity | none | prior, jumps, η, restarts |
+| carry-over between steps | full-width latents (`z_L`, `z_H`) | the hard tokens *plus* the previous posterior (self-conditioning) |
+| puzzle | as the input, injected into every step (`z_L + z_H + x`) | as an additive embedding, plus the givens pinned in the state; dropped 10 % for CFG |
+| Sudoku-specific structure | none (1D RoPE; the 2D variant `tuned_hrm_rope2d` exists) | none beyond axial 2D RoPE (row/col; no 3×3-box prior); `--givens soft` removes even the pinning at no cost at 113M |
+| output check | none | a valid board is a correct one, so it can verify and restart |
+
+### Why it is better — what the evidence supports
+
+1. **It is trained on its own intermediate states.** HRM has to invent a trajectory through latent
+   space that ends at the solution, supervised only by the readout at the end of each segment, with
+   no gradient across segments. The flow model never has to learn what a good intermediate state is:
+   the forward process *hands it one* — a board with a random fraction `t` of the cells right and
+   the rest random — and asks for the solution from there. One puzzle becomes a whole family of
+   "finish this partially-right board" problems, one per corruption draw, each with a per-cell
+   target. This is the same trick as teacher forcing, applied to the working state instead of the
+   output sequence, and it is where the 22× compute-to-peak comes from: the supervision is denser
+   and every step of it is on-distribution for what the sampler will see. The continuous model gets
+   this too and still fails on 1k (§5), so it is necessary, not sufficient.
+2. **The state is categorical and revised under cross-entropy, with a soft carry-over.** That is
+   the §7 ablation: uniform prior + self-conditioning is the whole difference between 24 % and
+   86 % at 113M. A hard token board with no self-conditioning cannot remember that a cell was
+   uncertain; a continuous board can, but its velocity regression rewards being close on average
+   rather than exactly right. The DFM has both a hard readout and a soft memory, which is the same
+   pair HRM has (`lm_head` over `z_H`, `z_L`/`z_H` carried). HRM's version is learned end to end
+   through 28 blocks of BPTT; the DFM's is one zero-initialised linear map over its own posterior.
+3. **The compute per evaluation goes into depth, not width.** HRM spends its 12.6M parameters on
+   four 512-wide blocks and gets depth by reusing them 28 times per segment. The size sweep says
+   that arrangement is a bad denoiser: `L4d512` as a DFM gets 35 %, `L8d512` 64 %, while the same
+   parameter count as 16 distinct 256-wide blocks gets 84 %. Whether HRM would also gain from
+   untied depth is a different experiment (the RT in `CYCLE_FF_EXPLAINED.md` reuses blocks too,
+   and lands at 70.5); what the sweep establishes is that once the per-step function has ~16
+   distinct blocks, width from 256 to 768 is worth only ~2–5 points.
+4. **The failure mode is one that restarts fix.** The sampler is stochastic and a Sudoku certifies
+   itself, so the 16 % of single-shot failures — which land on legal-looking boards far from the
+   answer, not near misses (§6) — are re-rolled: 84 → 98 % at 8 draws, 99.8 % at 32 on the 113M
+   model. HRM is deterministic; its 19 % of failures are final. This is not a training advantage,
+   but it is a property of the model class, and it is why "valid ⇒ correct" makes the comparison to
+   HRM's single pass the *conservative* one for the flow model.
+5. **It converges in 3–4 epochs and would rather stop there.** The same fact that makes it
+   data-efficient (dense per-cell supervision on 1000 puzzles × 10¹² augmentations × corruption
+   draws) makes it overfit by epoch 5–7 — every 1k DFM run halves from its peak by 30k steps. HRM
+   peaks at epoch 11–19 and degrades gently. So the DFM needs early stopping and HRM does not,
+   which is a real operational cost; it is also why the DFM's peak is reached in a tenth of HRM's
+   steps rather than being a faster learner that then keeps going.
+
+What it is **not**: it is not a smarter solver. §6's mechanism — amortised guess, constraint-directed
+stochastic repair, no propagation, no search — is the 113M continuous model's, but nothing in the
+discrete model's design adds search, and its guidance/η dependence (guidance 1 → 5 is worth 25
+points at 64 steps) is the same "repair needs a push" signature. The advantage is that its training
+problem is easier to learn from 1000 examples, not that it reasons more.
+
+### Caveats specific to this comparison
+
+- `best.pt` and the sampler cell (η ∈ {10, 20} × guidance ∈ {3, 5}, 128 steps) are selected on the
+  same 512 `test_hard` puzzles the number is reported on. HRM's "best epoch" is selected on the same
+  puzzles, so both are test-selected, but the DFM has four sampler cells to pick from and HRM has
+  none; the spread across those cells is 1–3 points, so read the 84.1 as up to ~1 point optimistic
+  relative to a fixed-sampler protocol. The full `test_hard` split has not been scored.
+- The in-training peaks of the five 13M runs ranged 81–87 % and identical seeds do not reproduce
+  (`torch.compile`, GPU multinomial), so the ± 1.2 offline is the number to carry, not any single
+  seed.
+- LR was tuned for the DFM ({1e-4, 3e-4, 1e-3}) and not re-tuned for HRM; `tuned_hrm` is the
+  repo's tuned configuration, but at 13M the DFM's win depends on the LR (79.5 at 1e-4 vs 84.1 at
+  3e-4), so the comparison is best-known recipe against best-known recipe, not matched tuning effort.
+
+## 9. So what does this say about HRM?
 
 The figure's last two rows lay out the differences; the ones that matter for the argument are these.
 
@@ -377,10 +490,12 @@ continuous flow model needs about three-and-a-half orders of magnitude more puzz
 
 **But the advantage is not over flow models as a class.** The discrete variant with
 self-conditioning (§7) reaches 86.5 ± 0.8 % on the same 1000 puzzles at the same budget, three
-seeds — above HRM's 80.65 ± 2.40, non-overlapping ranges — with no recurrence, no latent, no Sudoku-specific structure, and 3
-epochs of training. It is 9.4× larger and 20× more expensive per solve, so it does not make HRM's
-parameter- and compute-efficiency claim go away; it does make the *data*-efficiency claim
-conditional on the comparison class.
+seeds — above HRM's 80.65 ± 2.40, non-overlapping ranges — with no recurrence, no latent, no
+Sudoku-specific structure, and 3 epochs of training. At 113M it is 9.4× larger and 20× more
+expensive per solve; shrunk to HRM's own 13M (§8) it is still 3.5 points ahead, reaches its peak
+with 22× less training compute, and costs 2.3× HRM per solve. That leaves HRM one efficiency claim
+— inference compute per solve — and takes away the parameter and *data*-efficiency ones for this
+comparison class.
 
 **Iteration at inference is not, by itself, what makes a model data-efficient.** The continuous
 flow model iterates 64 times and revises its own answer, and on 1k it still memorises the orbit.
@@ -404,7 +519,7 @@ reaches 100 % on `test_hard` with restarts, and has no Sudoku-specific structure
 Nothing in HRM's design is *necessary* for Sudoku; it is what makes Sudoku learnable from 1000
 examples.
 
-## 9. Reproducing
+## 10. Reproducing
 
 ```
 ./run_flow_seeds.sh                    # continuous: all six runs, sequential, in tmux
@@ -420,7 +535,20 @@ Discrete run names are `dfm_113m_<prior>[_<tag>]_cfg_<data>`; the tags (`sc`, `s
 `wd1`, `scwd1`, `elbo`) map to flags in `run_dfm_seeds.sh`'s `variant_flags`. Logs are in
 `logs/dfmseeds/`; the sampler sweeps quoted in §7 are `eval_dfm_sudoku.py` output.
 
+The size sweep and the 13M comparison in §8 (`run_dfm_sizes.sh`: one single-GPU run per spec, batch
+768, the tuned sampler for the in-training eval):
+
+```
+./run_dfm_sizes.sh                                                   # the exploratory sweep, 8 GPUs
+NAME_SUFFIX=_n3 STOP_STEP=30000 ./run_dfm_sizes.sh L16d256:lr3:1 L16d256:lr3:2 L16d256:lr3:3   # the 13M, 3 seeds
+uv run python experiments/eval_dfm_sudoku.py --ckpt checkpoints/dfm_L16d256_unif_sc2t_lr3_n3_cfg_1k/seed_1/best.pt \
+    --sample-steps 128 --noise-scale 10 20 --guidance 3 5 --restarts 8
+uv run python experiments/collect_dfm_sizes.py logs/dfmsizes* logs/dfmlr* logs/dfmtiny* logs/dfmn3   # in-training table
+```
+
 The figure is generated by `experiments/make_flow_figure.py` (writes the SVG); the PNG is the SVG
 rendered at 2880 px wide with cairosvg (the same pipeline as `cycle_ff_architectures.png`). The continuous
-curves in the bottom panel are 3-seed means of the in-training evaluations, read from
+curves in the results panel are 3-seed means of the in-training evaluations, read from
 `logs/flowseeds/`; the discrete curves are seed 1 from `logs/dfmseeds/` (1k, ablations) and `logs/dfmfull/` (full data); 1k seeds 2–3 are in `logs/dfm1k/`.
+The size panel plots each shape's best in-training exact match at its best LR (`outputs/dfm_sizes/in_training_table.txt`),
+with the 3-seed offline numbers annotated.
