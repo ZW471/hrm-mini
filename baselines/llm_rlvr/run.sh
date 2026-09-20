@@ -72,6 +72,9 @@ evaluate() {
 # test_hard pass@K, plus the curriculum curve on training puzzles at fixed difficulty levels.
 STD=("test_hard:0:$BUDGET:$EVAL_N" "train:8:$BUDGET:$CURVE_N" "train:16:$BUDGET:$CURVE_N"
      "train:30:$BUDGET:$CURVE_N" "train:45:$BUDGET:$CURVE_N")
+# EXTRA_EVAL: more configs for every checkpoint eval, e.g. "test_hard:0:65536:256" to track a
+# larger budget than the one trained at (an eval at 2x costs ~2x the time).
+for c in ${EXTRA_EVAL:-}; do STD+=("$c"); done
 
 # Step 0: the untouched model.
 evaluate "$BASE" 0 step0 "${STD[@]}"

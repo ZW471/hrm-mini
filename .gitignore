@@ -87,3 +87,4 @@ desktop.ini
 
 # reasoning-baseline rollouts (large JSONL of token ids)
 rollouts/
+cot/

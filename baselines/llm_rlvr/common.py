@@ -59,8 +59,9 @@ def hinted_puzzle(question: str, answer: str, n_hints: int, seed: int, index: in
 
 
 def puzzle_with_empties(question: str, answer: str, n_empty: int, seed: int, index: int) -> str:
-    """Reveal cells until at most `n_empty` blanks remain (the curriculum's difficulty knob)."""
-    return hinted_puzzle(question, answer, question.count("0") - n_empty, seed, index)
+    """Reveal cells until at most `n_empty` blanks remain (the curriculum's difficulty knob).
+    A puzzle with fewer blanks than that (the split goes down to 46) is left untouched."""
+    return hinted_puzzle(question, answer, max(0, question.count("0") - n_empty), seed, index)
 
 
 def load_puzzles(data_dir: str, split: str) -> list[tuple[str, str]]:
