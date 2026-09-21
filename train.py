@@ -67,12 +67,49 @@ class TrainConfig(pydantic.BaseModel):
     # Eval split that "best.pt" is selected on (must be one of `eval_splits`)
     best_metric_split: str = "test_hard"
 
+    # Train-to-convergence ("warmup-stable-decay"): after the warm-up the lr stays at `lr` (set
+    # lr_min_ratio: 1.0) until the best `best_metric_split` score has not improved by at least
+    # `plateau_min_delta` for `plateau_patience_steps` optimizer steps; the lr is then annealed
+    # (cosine) to `anneal_min_ratio` x lr over `anneal_steps` steps and training stops. `epochs` only
+    # bounds the run. The decision is taken on rank 0 after an eval and broadcast, so all ranks
+    # stop together. None (default) = the fixed-length schedule above, no early stop.
+    plateau_patience_steps: Optional[int] = None
+    plateau_min_delta: float = 0.001
+    anneal_steps: int = 83200
+    anneal_min_ratio: float = 0.05
+    # Early stop for the fixed-length schedule: stop (no anneal) once the best `best_metric_split`
+    # score has not improved by `plateau_min_delta` for this many optimizer steps. Meant for tiny
+    # training sets that peak early and then overfit (test accuracy falls while train goes to 100 %),
+    # where the rest of the budget is wasted; `best.pt` is unaffected. None (default) = run to the end.
+    early_stop_patience_steps: Optional[int] = None
+
+    # Warm restart from a saved state_dict (e.g. an earlier run's `last.pt`, which holds EMA weights and
+    # no optimizer state): the weights are loaded before training, the optimizer and EMA start fresh
+    # and the lr warms up again. `init_checkpoint_steps` is the optimizer step that checkpoint had
+    # reached; it offsets the logged step so the W&B curve continues the original run's x-axis.
+    init_checkpoint: Optional[str] = None
+    init_checkpoint_steps: int = 0
+    # Log into the W&B run the checkpoint came from instead of a new one (wandb.init(resume="must")),
+    # so the continued training shows as one curve; needs `init_checkpoint_steps` so steps carry on.
+    wandb_resume_id: Optional[str] = None
+
     # Loss weight on the FINAL readout of a deeply supervised model; the remaining `1 - w` is spread
     # evenly over the earlier readouts. None (default) weights every readout equally, i.e. w = 1/R.
     # w = 1.0 supervises only the final readout, which is what `rt@RecurrentTransformer` does.
     final_readout_weight: Optional[float] = None
 
 # [Utils]
+# Top-level directories never worth shipping to wandb as source code: the virtualenvs (the big
+# one -- `.venv` and `.venv-vllm` hold ~18 GB of site-packages *.py between them), the datasets,
+# and anything this repo writes itself.
+_CODE_ARTIFACT_SKIP = (".venv", "venv", ".git", "wandb", "logs", "outputs", "checkpoints",
+                       "downloaded-datasets", "node_modules", "__pycache__")
+
+def _exclude_from_code_artifact(path: str, root: str = ".") -> bool:
+    """True if `path` should be kept out of the wandb code artifact."""
+    rel = os.path.relpath(path, root)
+    return any(part.startswith(_CODE_ARTIFACT_SKIP) for part in rel.split(os.sep))
+
 def load_module(identifier: str):
     module_path, class_name = identifier.split('@')
     # Import the module
@@ -143,13 +180,18 @@ def generate(model: nn.Module, x: Tensor) -> Tensor:
         seq[:, block_len + pos] = torch.argmax(y_hat[:, pos], dim=-1)
     return seq[:, block_len:]
 
-def update_lr(config: TrainConfig, optim: torch.optim.Optimizer, step: int, total_steps: int) -> float:
+def update_lr(config: TrainConfig, optim: torch.optim.Optimizer, step: int, total_steps: int, anneal_start: Optional[int] = None) -> float:
     # Linear warmup cosine schedule
     if step < config.lr_warmup_steps:
         lr = config.lr * min(1.0, step / config.lr_warmup_steps)
     else:
         progress = (step - config.lr_warmup_steps) / (total_steps - config.lr_warmup_steps)
         lr = config.lr * (config.lr_min_ratio + max(0.0, (1 - config.lr_min_ratio) * 0.5 * (1.0 + math.cos(math.pi * progress))))
+    # Plateau-triggered anneal (train-to-convergence): cosine from the current lr down to
+    # anneal_min_ratio x over anneal_steps, starting at the step the plateau was detected.
+    if anneal_start is not None:
+        progress = min(1.0, max(0.0, (step - anneal_start) / config.anneal_steps))
+        lr *= config.anneal_min_ratio + (1 - config.anneal_min_ratio) * 0.5 * (1.0 + math.cos(math.pi * progress))
 
     for param_group in optim.param_groups:
         param_group["lr"] = torch.tensor(lr * param_group.get("lr_mult", 1.0),
@@ -178,6 +220,10 @@ def train_single_seed(config: TrainConfig, seed: int, group_name: str, WORLD_SIZ
     is_autoregressive: bool = getattr(model_cls, "is_autoregressive", False)
     with torch.device("cuda"):
         model: nn.Module = model_cls(config.arch.__pydantic_extra__ | train_metadata)
+        if config.init_checkpoint:
+            model.load_state_dict(torch.load(config.init_checkpoint, map_location="cuda", weights_only=True))
+            if RANK == 0:
+                print(f"[init] loaded weights from {config.init_checkpoint} (trained for {config.init_checkpoint_steps} steps)", flush=True)
         model = torch.compile(model, dynamic=False, fullgraph=True)  # pyright: ignore[reportAssignmentType]
 
         # DDP Wrap
@@ -213,13 +259,23 @@ def train_single_seed(config: TrainConfig, seed: int, group_name: str, WORLD_SIZ
         progress_bar = tqdm.tqdm(total=total_steps, desc=f"seed={seed}")
 
         # Same wandb run name across seeds so runs can be grouped by name
-        wandb.init(project=config.data.name,
-                   name=group_name,
-                   group=group_name,
-                   config=config.model_dump() | {"seed": seed},
-                   settings=wandb.Settings(x_disable_stats=True))
+        if config.wandb_resume_id:
+            # Continue the original run: same id, config updated with the continuation's settings.
+            wandb.init(project=config.data.name, id=config.wandb_resume_id, resume="must",
+                       config=config.model_dump() | {"seed": seed}, allow_val_change=True,
+                       settings=wandb.Settings(x_disable_stats=True))
+        else:
+            wandb.init(project=config.data.name,
+                       name=group_name,
+                       group=group_name,
+                       config=config.model_dump() | {"seed": seed},
+                       settings=wandb.Settings(x_disable_stats=True))
         if wandb.run is not None:
-            wandb.run.log_code()
+            # Bare log_code() walks every *.py under the repo root, which sweeps `.venv/` and
+            # `.venv-vllm/` (~18 GB of site-packages) into wandb's artifact staging area on every
+            # seed of every run and fills the disk mid-training. Keep the repo's own sources and
+            # skip the environments, data and output dirs. `exclude_fn` is called as (path, root).
+            wandb.run.log_code(exclude_fn=_exclude_from_code_artifact)
 
     step = 0
     best_metric = -1.0
@@ -256,7 +312,9 @@ def train_single_seed(config: TrainConfig, seed: int, group_name: str, WORLD_SIZ
             if RANK == 0:
                 exact_match = num_total_correct[0] / num_total_correct[1]
                 eval_metrics[eval_name] = exact_match
-                wandb.log({f"eval/{eval_name}_exact_match": exact_match}, step=step)
+                wandb.log({f"eval/{eval_name}_exact_match": exact_match}, step=step + config.init_checkpoint_steps)
+                print(f"[eval] step {step + config.init_checkpoint_steps} {eval_name} exact_match {exact_match:.5f} "
+                      f"({num_total_correct[0]}/{num_total_correct[1]})", flush=True)
 
         # Save model (rank 0 only, all ranks hold identical weights).
         # Only 'last' and 'best' are kept; both are saved with EMA weights swapped in,
@@ -279,6 +337,40 @@ def train_single_seed(config: TrainConfig, seed: int, group_name: str, WORLD_SIZ
     last_eval_step = -1
     next_eval_step = config.eval_interval if config.eval_interval is not None else None
 
+    # Train-to-convergence controller (see TrainConfig.plateau_patience_steps). Rank 0 tracks the best
+    # score and decides; `anneal_start` and the stop flag are broadcast so every rank keeps the same
+    # lr schedule and leaves the loop at the same step.
+    plateau_best, plateau_best_step = -1.0, 0
+    anneal_start: Optional[int] = None
+    stop_training = False
+
+    def plateau_decision(step: int):
+        nonlocal plateau_best, plateau_best_step, anneal_start, stop_training
+        if config.plateau_patience_steps is None and config.early_stop_patience_steps is None:
+            return
+        state = torch.tensor([-1, 0], dtype=torch.long, device="cuda")
+        if RANK == 0:
+            if best_metric > plateau_best + config.plateau_min_delta:
+                plateau_best, plateau_best_step = best_metric, step
+            if config.early_stop_patience_steps is not None and step - plateau_best_step >= config.early_stop_patience_steps:
+                stop_training = True
+                print(f"[early-stop] best {plateau_best:.4f} at step {plateau_best_step}; no gain >= {config.plateau_min_delta} for "
+                      f"{step - plateau_best_step} steps -> stopping at step {step}", flush=True)
+            if config.plateau_patience_steps is not None and anneal_start is None and step - plateau_best_step >= config.plateau_patience_steps:
+                anneal_start = step
+                print(f"[plateau] best {plateau_best:.4f} at step {plateau_best_step}; no gain >= {config.plateau_min_delta} for "
+                      f"{step - plateau_best_step} steps -> annealing lr to {config.anneal_min_ratio}x over {config.anneal_steps} steps", flush=True)
+                wandb.log({"train/anneal_start": anneal_start + config.init_checkpoint_steps}, step=step + config.init_checkpoint_steps)
+            if anneal_start is not None and step >= anneal_start + config.anneal_steps:
+                stop_training = True
+                print(f"[plateau] anneal finished at step {step}; stopping (best {best_metric:.4f})", flush=True)
+            state[0] = -1 if anneal_start is None else anneal_start
+            state[1] = int(stop_training)
+        if dist.is_initialized():
+            dist.broadcast(state, src=0)
+        anneal_start = None if state[0].item() < 0 else int(state[0].item())
+        stop_training = bool(state[1].item())
+
     for epoch in range(config.epochs):
         model.train()
         for x, y in train_loader:
@@ -290,13 +382,13 @@ def train_single_seed(config: TrainConfig, seed: int, group_name: str, WORLD_SIZ
             carry: Carry = model.module.initial_carry
             for _ in range(config.cycles_per_data):
                 step += 1
-                lr = update_lr(config, optim, step, total_steps)
+                lr = update_lr(config, optim, step, total_steps, anneal_start)
 
                 carry, metrics = train_step(model, carry, optim, x, y, is_autoregressive, config.final_readout_weight)
 
             if RANK == 0 and progress_bar is not None and step - progress_bar.n >= config.log_interval:
                 progress_bar.update(step - progress_bar.n)
-                wandb.log({f"train/{k}": v.item() for k, v in metrics.items()} | {"train/lr": lr}, step=step)
+                wandb.log({f"train/{k}": v.item() for k, v in metrics.items()} | {"train/lr": lr}, step=step + config.init_checkpoint_steps)
 
             del x, y, carry, metrics
 
@@ -306,11 +398,20 @@ def train_single_seed(config: TrainConfig, seed: int, group_name: str, WORLD_SIZ
                 last_eval_step = step
                 while next_eval_step <= step:
                     next_eval_step += config.eval_interval
+                plateau_decision(step)
+                if stop_training:
+                    break
+
+        if stop_training:
+            break
 
         # Per-epoch eval, the default when `eval_interval` is unset
         if config.eval_interval is None:
             evaluate_and_checkpoint(step)
             last_eval_step = step
+            plateau_decision(step)
+            if stop_training:
+                break
 
     # Always finish on an eval of the final weights
     if last_eval_step != step:

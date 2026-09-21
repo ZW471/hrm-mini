@@ -1,0 +1,11 @@
+# Sudoku-Extreme 1-puzzle subset: nested inside the 1k split (dataset/build_sudoku_tiny_subsets.py).
+# The step budget is held at the 1k / full arms' ~83k: every epoch wraps the 1 puzzle(s) to the 1k arm's
+#   200,000 samples/epoch x 20 epochs = 4.0M augmented samples / (96*8) x 16 cycles = 83,200 steps
+# so `epochs: 20` must be set alongside this data config. `samples_per_epoch` (one index map) is used
+# instead of `repeat` because HF Dataset.repeat(n) concatenates n copies and is far too slow at n >= 2000.
+# Augmentation is sampled per batch, so each puzzle is seen under 4.0M / 1 distinct augmentations.
+name: sudoku
+dataset_name: ./downloaded-datasets/sudoku-extreme-1
+repeat: 1
+samples_per_epoch: 200000
+augment: True

@@ -30,9 +30,12 @@ def evaluate():
     # Initialize Dataloader
     create_dataloader = load_module(f"dataset.{config.data.name}@create_dataloader")
     
-    # Load evaluation dataset
+    # Load evaluation dataset. Runs trained on a dataset without the eval split (full Sudoku-Extreme
+    # has no `test_hard`) name the directory to take the eval splits from, as train.py does.
+    data_kwargs = dict(config.data.__pydantic_extra__ or {}) | (
+        {"dataset_name": config.eval_dataset_name} if config.eval_dataset_name else {})
     eval_loader, metadata = create_dataloader(
-        args.split, args.batch_size or config.local_batch_size, rank=0, world_size=1, **config.data.__pydantic_extra__  # pyright: ignore[reportCallIssue]
+        args.split, args.batch_size or config.local_batch_size, rank=0, world_size=1, **data_kwargs  # pyright: ignore[reportCallIssue]
     )
 
     # Initialize Model

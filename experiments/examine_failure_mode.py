@@ -35,16 +35,23 @@ exists for the large majority of puzzles.
      any training solution. A non-match *proves* the puzzle is outside the training orbit; a match
      is inconclusive, so that edit is skipped and the next candidate is tried.
 
-Prefer `last.pt` over `best.pt` here: `best.pt` is selected on test-set exact match, which for a
-memorising run is an early, under-fit snapshot -- not the model whose memorisation is in question.
+Read every arm at `best.pt`, the snapshot selected on held-out (`test_hard`) exact match. That is
+the checkpoint each run is reported at everywhere else in this repo, so the probe scores the model
+that is actually being claimed rather than a differently-selected one, and no arm is advantaged by
+a selection rule the others did not get. Selection is on held-out data, so it leaks nothing about
+the train-split puzzles the probe edits.
+
 `--split test_hard` is the control: those puzzles were never trained on, so nothing can be copied,
 and it also shows that the edited puzzles are no harder than the originals.
 
 Usage
 -----
     uv run python experiments/examine_failure_mode.py \
-        --ckpt "hrm=checkpoints/tuned_hrm free-sturgeon/seed_1/last.pt" \
-        --ckpt "mae=checkpoints/mae_flops_matched golden-raccoon/seed_1/last.pt"
+        --ckpt "hrm=checkpoints/tuned_hrm free-sturgeon/seed_1/best.pt" \
+        --ckpt "mae=checkpoints/mae_flops_matched golden-raccoon/seed_1/best.pt"
+
+`outputs/failure_mode/rescore.sh` scores the whole architecture x training-set-size grid in the
+one invocation per split that the CSV rewrite requires.
 
 Building the pairs takes a few minutes; `--pairs outputs/failure_mode/pairs_train.npz` reuses the
 ones a previous run saved, so further checkpoints are scored on the identical puzzles.

@@ -1,0 +1,9 @@
+# Sudoku-Extreme 100k subset: stratified by source, contains the 1k split, nested inside the next
+# size up (dataset/build_sudoku_subsets.py). The step budget is held at the 1k / full arms' ~83k:
+#   100000 puzzles x repeat 2 x 20 epochs = 4.0M augmented samples / (96*8) x 16 cycles = ~83.3k steps
+# so `epochs: 20` must be set alongside this data config. Augmentation is sampled per batch,
+# so repeat x epochs is the number of distinct augmentations each puzzle is seen under.
+name: sudoku
+dataset_name: ./downloaded-datasets/sudoku-extreme-100k
+repeat: 2
+augment: True

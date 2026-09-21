@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="576" viewBox="0 0 1080 576" font-family='system-ui, -apple-system, "Segoe UI", sans-serif' font-size="13" fill="#0b0b0b">
+<rect width="1080" height="576" fill="#fcfcfb"/>
+<text x="24" y="34" font-size="18" font-weight="600">LLM baselines on Sudoku-Extreme (test_hard, exact match, 256 puzzles)</text>
+<text x="24" y="54" fill="#52514e">Student: Qwen3.5-4B. Every trace is verified against the gold solution; puzzles come only from the 1k training split.</text>
+<text x="70" y="84" font-size="14" font-weight="600">A. Distilled-CoT SFT: accuracy grows with verified traces</text>
+<text x="70" y="100" fill="#52514e" font-size="12">test_hard pass@1 (%), by thinking budget at evaluation</text>
+<line x1="70" y1="470.0" x2="540" y2="470.0" stroke="#e1e0d9" stroke-width="1"/>
+<text x="62" y="474.0" text-anchor="end" fill="#898781" font-size="12">0</text>
+<line x1="70" y1="380.0" x2="540" y2="380.0" stroke="#e1e0d9" stroke-width="1"/>
+<text x="62" y="384.0" text-anchor="end" fill="#898781" font-size="12">5</text>
+<line x1="70" y1="290.0" x2="540" y2="290.0" stroke="#e1e0d9" stroke-width="1"/>
+<text x="62" y="294.0" text-anchor="end" fill="#898781" font-size="12">10</text>
+<line x1="70" y1="200.0" x2="540" y2="200.0" stroke="#e1e0d9" stroke-width="1"/>
+<text x="62" y="204.0" text-anchor="end" fill="#898781" font-size="12">15</text>
+<line x1="70" y1="110.0" x2="540" y2="110.0" stroke="#e1e0d9" stroke-width="1"/>
+<text x="62" y="114.0" text-anchor="end" fill="#898781" font-size="12">20</text>
+<line x1="70" y1="470" x2="540" y2="470" stroke="#c3c2b7" stroke-width="1"/>
+<text x="102.6" y="488" text-anchor="middle" fill="#898781" font-size="12">259</text>
+<text x="155.2" y="488" text-anchor="middle" fill="#898781" font-size="12">354</text>
+<text x="248.0" y="488" text-anchor="middle" fill="#898781" font-size="12">522</text>
+<text x="296.2" y="488" text-anchor="middle" fill="#898781" font-size="12">609</text>
+<text x="508.5" y="488" text-anchor="middle" fill="#898781" font-size="12">993</text>
+<text x="305" y="510" text-anchor="middle" fill="#52514e" font-size="12">verified teacher traces used for SFT (one per puzzle)</text>
+<text x="508.5" y="502" text-anchor="middle" fill="#898781" font-size="10">609 full + 384 hinted</text>
+<path d="M102.6,357.5 L155.2,310.0 L248.0,241.5 L296.2,215.1 L508.5,150.1" fill="none" stroke="#2a78d6" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="102.6" cy="357.5" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="155.2" cy="310.0" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="248.0" cy="241.5" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="296.2" cy="215.1" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="508.5" cy="150.1" r="4" fill="#2a78d6" stroke="#fcfcfb" stroke-width="2"/>
+<text x="518.5" y="154.1" font-size="12" fill="#0b0b0b">17.8% <tspan fill="#52514e">@64k</tspan></text>
+<path d="M102.6,424.3 L155.2,408.5 L248.0,390.9 L296.2,387.4 L508.5,364.5" fill="none" stroke="#eb6834" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="102.6" cy="424.3" r="4" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="155.2" cy="408.5" r="4" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="248.0" cy="390.9" r="4" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="296.2" cy="387.4" r="4" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="508.5" cy="364.5" r="4" fill="#eb6834" stroke="#fcfcfb" stroke-width="2"/>
+<text x="518.5" y="368.5" font-size="12" fill="#0b0b0b">5.9% <tspan fill="#52514e">@32k</tspan></text>
+<path d="M102.6,454.2 L155.2,441.9 L248.0,436.6 L296.2,438.4 L508.5,426.1" fill="none" stroke="#1baf7a" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+<circle cx="102.6" cy="454.2" r="4" fill="#1baf7a" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="155.2" cy="441.9" r="4" fill="#1baf7a" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="248.0" cy="436.6" r="4" fill="#1baf7a" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="296.2" cy="438.4" r="4" fill="#1baf7a" stroke="#fcfcfb" stroke-width="2"/>
+<circle cx="508.5" cy="426.1" r="4" fill="#1baf7a" stroke="#fcfcfb" stroke-width="2"/>
+<text x="518.5" y="430.1" font-size="12" fill="#0b0b0b">2.4% <tspan fill="#52514e">@16k</tspan></text>
+<line x1="82" y1="124" x2="104" y2="124" stroke="#2a78d6" stroke-width="2"/>
+<text x="110" y="128" font-size="12" fill="#52514e">64k thinking budget</text>
+<line x1="82" y1="142" x2="104" y2="142" stroke="#eb6834" stroke-width="2"/>
+<text x="110" y="146" font-size="12" fill="#52514e">32k thinking budget</text>
+<line x1="82" y1="160" x2="104" y2="160" stroke="#1baf7a" stroke-width="2"/>
+<text x="110" y="164" font-size="12" fill="#52514e">16k thinking budget</text>
+<text x="570" y="84" font-size="14" font-weight="600">B. Every LLM arm, best reported budget</text>
+<text x="570" y="100" fill="#52514e" font-size="12">test_hard pass@1 (%)</text>
+<line x1="800.0" y1="110" x2="800.0" y2="418" stroke="#e1e0d9" stroke-width="1"/>
+<text x="800.0" y="434" text-anchor="middle" fill="#898781" font-size="12">0</text>
+<line x1="860.0" y1="110" x2="860.0" y2="418" stroke="#e1e0d9" stroke-width="1"/>
+<text x="860.0" y="434" text-anchor="middle" fill="#898781" font-size="12">5</text>
+<line x1="920.0" y1="110" x2="920.0" y2="418" stroke="#e1e0d9" stroke-width="1"/>
+<text x="920.0" y="434" text-anchor="middle" fill="#898781" font-size="12">10</text>
+<line x1="980.0" y1="110" x2="980.0" y2="418" stroke="#e1e0d9" stroke-width="1"/>
+<text x="980.0" y="434" text-anchor="middle" fill="#898781" font-size="12">15</text>
+<line x1="1040.0" y1="110" x2="1040.0" y2="418" stroke="#e1e0d9" stroke-width="1"/>
+<text x="1040.0" y="434" text-anchor="middle" fill="#898781" font-size="12">20</text>
+<line x1="800" y1="110" x2="800" y2="418" stroke="#c3c2b7" stroke-width="1"/>
+<text x="790" y="136.0" text-anchor="end" font-size="12" fill="#52514e">RLVR from base (GRPO, curriculum), 4B, 32k</text>
+<text x="806.0" y="136.0" font-size="12" fill="#0b0b0b">0.0%</text>
+<text x="790" y="180.0" text-anchor="end" font-size="12" fill="#52514e">Self-distilled CoT SFT, Qwen3.8-27B, 32k</text>
+<text x="806.0" y="180.0" font-size="12" fill="#0b0b0b">0.0%</text>
+<text x="790" y="224.0" text-anchor="end" font-size="12" fill="#52514e">Qwen3.5-4B base, 16k thinking</text>
+<path d="M800,209.0 H800.6 a0.6000000000000227,0.6000000000000227 0 0 1 0.6000000000000227,0.6000000000000227 V230.4 a0.6000000000000227,0.6000000000000227 0 0 1 -0.6000000000000227,0.6000000000000227 H800 Z" fill="#2a78d6"/>
+<text x="807.2" y="224.0" font-size="12" fill="#0b0b0b">0.1%</text>
+<text x="790" y="268.0" text-anchor="end" font-size="12" fill="#52514e">Direct-answer SFT, Qwen3.8-27B</text>
+<path d="M800,253.0 H844.0 a4,4 0 0 1 4,4 V271.0 a4,4 0 0 1 -4,4 H800 Z" fill="#2a78d6"/>
+<text x="854.0" y="268.0" font-size="12" fill="#0b0b0b">4.0%</text>
+<text x="790" y="312.0" text-anchor="end" font-size="12" fill="#52514e">Prompting only, Qwen3.8-27B, 32k thinking</text>
+<path d="M800,297.0 H859.6 a4,4 0 0 1 4,4 V315.0 a4,4 0 0 1 -4,4 H800 Z" fill="#2a78d6"/>
+<text x="869.6" y="312.0" font-size="12" fill="#0b0b0b">5.3%</text>
+<text x="790" y="356.0" text-anchor="end" font-size="12" fill="#52514e">Distilled-CoT SFT, 4B, 32k thinking</text>
+<path d="M800,341.0 H866.3 a4,4 0 0 1 4,4 V359.0 a4,4 0 0 1 -4,4 H800 Z" fill="#2a78d6"/>
+<text x="876.3" y="356.0" font-size="12" fill="#0b0b0b">5.9%</text>
+<text x="790" y="400.0" text-anchor="end" font-size="12" fill="#52514e">Distilled-CoT SFT, 4B, 64k thinking</text>
+<path d="M800,385.0 H1009.3 a4,4 0 0 1 4,4 V403.0 a4,4 0 0 1 -4,4 H800 Z" fill="#2a78d6"/>
+<text x="1019.3" y="400.0" font-size="12" fill="#0b0b0b">17.8%</text>
+<text x="24" y="530" fill="#52514e" font-size="11">Teachers for the 4B student: DeepSeek V4 Pro (solves 35% of training puzzles per attempt; 522 traces after retries and repair) and Claude Opus 5 on the unsolved tail (87 traces),</text>
+<text x="24" y="546" fill="#52514e" font-size="11">plus 384 DeepSeek traces of the remaining puzzles with cells revealed down to 40 blanks. The 27B numbers are from earlier arms of this study (test_hard subsets of 1024 / 512).</text>
+<text x="24" y="562" fill="#52514e" font-size="11">RLVR from the distilled checkpoint is in progress and not shown.</text>
+</svg>

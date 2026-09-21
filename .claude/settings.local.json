@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(claude --version)",
+      "Read(//root/.claude/**)",
+      "Bash(curl -fsSL https://claude.ai/install.sh -o /tmp/claude-0/-sg-pretrain-zhiyu-hrm-rebuttal-hrm-mini/c0e71ec0-bc9e-46d4-84eb-0bb9e6c3d4d2/scratchpad/install.sh)",
+      "Bash(bash /tmp/claude-0/-sg-pretrain-zhiyu-hrm-rebuttal-hrm-mini/c0e71ec0-bc9e-46d4-84eb-0bb9e6c3d4d2/scratchpad/install.sh)",
+      "Bash(~/.local/bin/claude --version)",
+      "Read(//root/**)",
+      "Bash(cat >> *)",
+      "Bash(bash -ic 'alias claudex')"
+    ]
+  }
+}

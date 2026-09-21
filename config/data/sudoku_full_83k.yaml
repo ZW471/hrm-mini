@@ -1,0 +1,9 @@
+# Full Sudoku-Extreme (3,831,994 puzzles), one epoch padded to the ~83k-step budget of the 1k..1M arms:
+#   3,993,600 samples / (96*8) x 16 cycles = 83,200 steps  (plain one epoch: 79,824 steps, 4 % short)
+# The padding wraps around the set, so 161,606 puzzles (4.2 %) are drawn twice under fresh
+# augmentation; every puzzle is still seen, and the unique count is unchanged. Use with `epochs: 1`.
+name: sudoku
+dataset_name: ./downloaded-datasets/sudoku-extreme
+repeat: 1
+augment: True
+samples_per_epoch: 3993600

@@ -1,3 +1,4 @@
+from typing import Optional
 from functools import partial
 
 import numpy as np
@@ -58,12 +59,18 @@ def collate_fn(batch: list[dict[str, str]], augment: bool) -> tuple[Tensor, Tens
 def _worker_init_fn(worker_id: int, base_seed: int):
     np.random.seed(base_seed + worker_id)
 
-def create_dataloader(split: str, batch_size: int, rank: int, world_size: int, dataset_name: str, augment: bool = False, repeat: int = 1, seed: int = 42):
+def create_dataloader(split: str, batch_size: int, rank: int, world_size: int, dataset_name: str, augment: bool = False, repeat: int = 1, seed: int = 42, samples_per_epoch: Optional[int] = None):
     is_train = split == "train"
     dataset: Dataset = load_dataset(dataset_name, split=split, features = Features({
         "question": Value("string"),
         "answer": Value("string"),
     })).repeat(repeat if is_train else 1)  # pyright: ignore[reportAssignmentType]
+    # Optionally fix the number of training samples per epoch, wrapping around the (repeated) set, so
+    # that a dataset whose size is not a multiple of the step budget can still match it exactly: one
+    # epoch of full Sudoku-Extreme (3,831,994 puzzles) is 79,824 steps, 4 % short of the 83,200 of the
+    # 1k..1M arms; padding to 3,993,600 samples re-draws 4.2 % of the puzzles (under fresh augmentation).
+    if is_train and samples_per_epoch is not None:
+        dataset = dataset.select(np.arange(samples_per_epoch) % len(dataset))
 
     return DataLoader(
         dataset,
