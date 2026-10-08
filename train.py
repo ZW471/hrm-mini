@@ -82,6 +82,10 @@ class TrainConfig(pydantic.BaseModel):
     # training sets that peak early and then overfit (test accuracy falls while train goes to 100 %),
     # where the rest of the budget is wasted; `best.pt` is unaffected. None (default) = run to the end.
     early_stop_patience_steps: Optional[int] = None
+    # Fixed run length in optimizer steps, independent of the dataset size: the cosine schedule spans
+    # `max_steps` and training stops there (after a final eval). `epochs` must be large enough to reach
+    # it. None (default) = the run spans `epochs` and the schedule is `cycles_per_data x batches x epochs`.
+    max_steps: Optional[int] = None
 
     # Warm restart from a saved state_dict (e.g. an earlier run's `last.pt`, which holds EMA weights and
     # no optimizer state): the weights are loaded before training, the optimizer and EMA start fresh
@@ -214,6 +218,10 @@ def train_single_seed(config: TrainConfig, seed: int, group_name: str, WORLD_SIZ
     eval_loaders = {split_name: create_dataloader(split_name, config.local_batch_size, rank=RANK, world_size=WORLD_SIZE, seed=seed, **eval_data_kwargs)[0] for split_name in config.eval_splits}  # pyright: ignore[reportCallIssue]
 
     total_steps = int(config.cycles_per_data * len(train_loader) * config.epochs)
+    if config.max_steps is not None:
+        if config.max_steps > total_steps:
+            raise ValueError(f"max_steps={config.max_steps} exceeds the {total_steps} steps that epochs={config.epochs} provides")
+        total_steps = config.max_steps
 
     # Initialize Model and Optimizer
     model_cls = load_module(f"arch.{config.arch.name}")
@@ -316,6 +324,7 @@ def train_single_seed(config: TrainConfig, seed: int, group_name: str, WORLD_SIZ
                 print(f"[eval] step {step + config.init_checkpoint_steps} {eval_name} exact_match {exact_match:.5f} "
                       f"({num_total_correct[0]}/{num_total_correct[1]})", flush=True)
 
+        improved = False
         # Save model (rank 0 only, all ranks hold identical weights).
         # Only 'last' and 'best' are kept; both are saved with EMA weights swapped in,
         # i.e. exactly the weights that produced the eval numbers above.
@@ -327,11 +336,21 @@ def train_single_seed(config: TrainConfig, seed: int, group_name: str, WORLD_SIZ
             score = eval_metrics.get(config.best_metric_split)
             if score is not None and score > best_metric:
                 best_metric = score
+                improved = True
                 torch.save(state_dict, os.path.join(checkpoint_dir, "best.pt"))
 
             del state_dict
 
         optim.swap_ema()  # Swap EMA back
+
+        # Also keep the raw (non-EMA) weights at the same points, so both can be evaluated without
+        # retraining; `best_raw.pt` follows the EMA-selected best step.
+        if RANK == 0 and config.ema is not None:
+            raw_state_dict = {k.replace("_orig_mod.", ""): v for k, v in model.module.state_dict().items()}
+            torch.save(raw_state_dict, os.path.join(checkpoint_dir, "last_raw.pt"))
+            if improved:
+                torch.save(raw_state_dict, os.path.join(checkpoint_dir, "best_raw.pt"))
+            del raw_state_dict
         model.train()
 
     last_eval_step = -1
@@ -401,6 +420,9 @@ def train_single_seed(config: TrainConfig, seed: int, group_name: str, WORLD_SIZ
                 plateau_decision(step)
                 if stop_training:
                     break
+            if config.max_steps is not None and step >= total_steps:
+                stop_training = True
+                break
 
         if stop_training:
             break
